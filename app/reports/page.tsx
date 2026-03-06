@@ -1,5 +1,6 @@
 import { Sidebar } from "@/components/dashboard/sidebar"
 import { Header } from "@/components/dashboard/header"
+import { ReportsContent } from "@/components/reports/reports-content"
 
 export default function ReportsPage() {
   return (
@@ -10,6 +11,7 @@ export default function ReportsPage() {
 
       <main className="flex-1 p-4 lg:p-6 lg:ml-64">
         <Header />
+        <ReportsContent />
       </main>
     </div>
   )

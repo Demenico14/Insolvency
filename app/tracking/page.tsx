@@ -1,5 +1,6 @@
 import { Sidebar } from "@/components/dashboard/sidebar"
 import { Header } from "@/components/dashboard/header"
+import { FileTracking } from "@/components/tracking/file-tracking"
 
 export default function FileTrackingPage() {
   return (
@@ -10,6 +11,7 @@ export default function FileTrackingPage() {
 
       <main className="flex-1 p-4 lg:p-6 lg:ml-64">
         <Header />
+        <FileTracking />
       </main>
     </div>
   )

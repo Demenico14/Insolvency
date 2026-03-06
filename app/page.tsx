@@ -1,5 +1,6 @@
 import { Sidebar } from "@/components/dashboard/sidebar"
 import { Header } from "@/components/dashboard/header"
+import { DashboardContent } from "@/components/dashboard/dashboard-content"
 
 export default function DashboardPage() {
   return (
@@ -10,6 +11,7 @@ export default function DashboardPage() {
 
       <main className="flex-1 p-4 lg:p-6 lg:ml-64">
         <Header />
+        <DashboardContent />
       </main>
     </div>
   )
