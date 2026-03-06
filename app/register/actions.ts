@@ -76,7 +76,7 @@ export async function registerFile(formData: {
       assigned_officer_id: formData.assigned_officer_id || null,
       physical_location: formData.physical_location || null,
       status: formData.status,
-      category_specific_data: formData.category_specific_data || null,
+      category_details: formData.category_specific_data || null,
     })
     .select()
     .single()

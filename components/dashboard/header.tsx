@@ -33,6 +33,7 @@ export function Header() {
               src="/profile.jpg"
               alt="User profile"
               fill
+              priority
               className="object-cover"
             />
           </div>
