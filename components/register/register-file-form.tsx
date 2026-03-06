@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import { FilePlus, Save, RotateCcw, Loader2, CheckCircle2 } from "lucide-react"
+import { FilePlus, Save, RotateCcw, Loader2, CheckCircle2, Upload, FileText, X } from "lucide-react"
 import { getOfficers, getCategories, generateFileReference, registerFile } from "@/app/register/actions"
 
 const statusOptions = [
@@ -38,6 +38,8 @@ export function RegisterFileForm() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitSuccess, setSubmitSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [isUploading, setIsUploading] = useState(false)
 
   useEffect(() => {
     async function loadData() {
@@ -73,12 +75,64 @@ export function RegisterFileForm() {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      // Allow PDF, Word docs, images
+      const allowedTypes = ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/jpeg', 'image/png', 'image/gif']
+      if (!allowedTypes.includes(file.type)) {
+        setError("Invalid file type. Please upload PDF, Word document, or image files.")
+        return
+      }
+      if (file.size > 10 * 1024 * 1024) { // 10MB limit
+        setError("File size exceeds 10MB limit.")
+        return
+      }
+      setSelectedFile(file)
+      setError(null)
+    }
+  }
+
+  const handleRemoveFile = () => {
+    setSelectedFile(null)
+  }
+
+  const uploadFile = async (): Promise<{ url: string; name: string } | null> => {
+    if (!selectedFile) return null
+    
+    setIsUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", selectedFile)
+      formData.append("folder", "insolvency-files")
+      
+      const response = await fetch("/api/upload", {
+        method: "POST",
+        body: formData,
+      })
+      
+      if (!response.ok) {
+        throw new Error("Upload failed")
+      }
+      
+      const data = await response.json()
+      return { url: data.url, name: selectedFile.name }
+    } catch (err) {
+      console.error("File upload error:", err)
+      setError("Failed to upload file. Please try again.")
+      return null
+    } finally {
+      setIsUploading(false)
+    }
+  }
+
   const handleReset = () => {
     setSelectedCategory(null)
     setFileNumber("")
     setFormData({})
     setError(null)
     setSubmitSuccess(false)
+    setSelectedFile(null)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -87,6 +141,16 @@ export function RegisterFileForm() {
 
     setIsSubmitting(true)
     setError(null)
+
+    // Upload file first if selected
+    let documentInfo: { url: string; name: string } | null = null
+    if (selectedFile) {
+      documentInfo = await uploadFile()
+      if (!documentInfo && selectedFile) {
+        setIsSubmitting(false)
+        return // Upload failed, error already set
+      }
+    }
 
     const result = await registerFile({
       file_reference: fileNumber,
@@ -98,6 +162,8 @@ export function RegisterFileForm() {
       physical_location: formData.physicalLocation,
       status: formData.status || "active",
       category_specific_data: formData,
+      document_url: documentInfo?.url,
+      document_name: documentInfo?.name,
     })
 
     setIsSubmitting(false)
@@ -274,6 +340,60 @@ export function RegisterFileForm() {
                 </SelectContent>
               </Select>
             </div>
+          </div>
+
+          {/* Document Upload Section */}
+          <div className="space-y-2 pt-4 border-t border-border">
+            <Label className="text-foreground">Upload Document (Optional)</Label>
+            <p className="text-sm text-muted-foreground mb-3">
+              Attach a scanned copy or digital document (PDF, Word, or image files up to 10MB)
+            </p>
+            
+            {!selectedFile ? (
+              <label 
+                htmlFor="document-upload" 
+                className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-lg cursor-pointer bg-muted/30 hover:bg-muted/50 transition-colors"
+              >
+                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                  <Upload className="w-8 h-8 mb-2 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">
+                    <span className="font-medium text-primary">Click to upload</span> or drag and drop
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    PDF, DOC, DOCX, PNG, JPG, GIF (max 10MB)
+                  </p>
+                </div>
+                <input 
+                  id="document-upload" 
+                  type="file" 
+                  className="hidden" 
+                  accept=".pdf,.doc,.docx,.png,.jpg,.jpeg,.gif"
+                  onChange={handleFileSelect}
+                />
+              </label>
+            ) : (
+              <div className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg border border-border">
+                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                  <FileText className="w-5 h-5 text-primary" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{selectedFile.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {(selectedFile.size / 1024 / 1024).toFixed(2)} MB
+                  </p>
+                </div>
+                <Button 
+                  type="button" 
+                  variant="ghost" 
+                  size="icon" 
+                  onClick={handleRemoveFile}
+                  className="flex-shrink-0 text-muted-foreground hover:text-destructive"
+                >
+                  <X className="w-4 h-4" />
+                  <span className="sr-only">Remove file</span>
+                </Button>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>

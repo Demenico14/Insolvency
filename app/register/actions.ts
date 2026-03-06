@@ -62,6 +62,8 @@ export async function registerFile(formData: {
   physical_location?: string
   status: string
   category_specific_data?: Record<string, unknown>
+  document_url?: string
+  document_name?: string
 }) {
   const supabase = await createClient()
 
@@ -77,6 +79,8 @@ export async function registerFile(formData: {
       physical_location: formData.physical_location || null,
       status: formData.status,
       category_details: formData.category_specific_data || null,
+      document_url: formData.document_url || null,
+      document_name: formData.document_name || null,
     })
     .select()
     .single()
