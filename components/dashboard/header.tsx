@@ -1,12 +1,38 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { Search, Bell } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { MobileNav } from "./mobile-nav"
-import Image from "next/image"
+import { createClient } from "@/lib/supabase/client"
 
 export function Header() {
+  const supabase = createClient()
+  const [fullName, setFullName] = useState("")
+  const [email, setEmail] = useState("")
+  const [avatarUrl, setAvatarUrl] = useState("")
+
+  useEffect(() => {
+    const loadUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) {
+        setFullName(user.user_metadata?.full_name ?? "")
+        setEmail(user.email ?? "")
+        setAvatarUrl(user.user_metadata?.avatar_url ?? "")
+      }
+    }
+    loadUser()
+  }, [])
+
+  const initials = fullName
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .toUpperCase()
+    .slice(0, 2) || "?"
+
   return (
     <header className="flex items-center justify-between gap-4 mb-6">
       <div className="lg:hidden">
@@ -28,18 +54,18 @@ export function Header() {
         </Button>
 
         <div className="flex items-center gap-3 pl-2 border-l border-border">
-          <div className="relative w-9 h-9 rounded-full overflow-hidden ring-2 ring-primary/20 transition-all duration-300 hover:ring-primary/40 cursor-pointer">
-            <Image
-              src="/profile.jpg"
-              alt="User profile"
-              fill
-              priority
-              className="object-cover"
-            />
-          </div>
+          <Avatar className="w-9 h-9 ring-2 ring-primary/20 hover:ring-primary/40 transition-all duration-300 cursor-pointer">
+            {avatarUrl ? <AvatarImage src={avatarUrl} alt={fullName} /> : null}
+            <AvatarFallback className="text-sm font-semibold">{initials}</AvatarFallback>
+          </Avatar>
+
           <div className="hidden sm:block">
-            <p className="text-sm font-medium text-foreground leading-none">Alex Johnson</p>
-            <p className="text-xs text-muted-foreground mt-0.5">Product Manager</p>
+            <p className="text-sm font-medium text-foreground leading-none">
+              {fullName || "—"}
+            </p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {email || "Loading…"}
+            </p>
           </div>
         </div>
       </div>

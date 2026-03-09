@@ -11,9 +11,9 @@ import { FilePlus, Save, RotateCcw, Loader2, CheckCircle2, Upload, FileText, X }
 import { getOfficers, getCategories, generateFileReference, registerFile } from "@/app/register/actions"
 
 const statusOptions = [
-  { value: "active", label: "Active" },
-  { value: "archived", label: "Archived" },
-  { value: "missing", label: "Missing" },
+  { value: "Active", label: "Active" },
+  { value: "Archived", label: "Archived" },
+  { value: "Missing", label: "Missing" },
 ]
 
 interface Officer {

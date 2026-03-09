@@ -30,9 +30,9 @@ import { getCategories, getOfficers } from "@/app/register/actions"
 import Link from "next/link"
 
 const statusColors: Record<string, string> = {
-  active: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
-  archived: "bg-amber-500/10 text-amber-500 border-amber-500/20",
-  missing: "bg-red-500/10 text-red-500 border-red-500/20",
+  Active: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+  Archived: "bg-amber-500/10 text-amber-500 border-amber-500/20",
+  Missing: "bg-red-500/10 text-red-500 border-red-500/20",
 }
 
 interface Category {
@@ -248,9 +248,9 @@ export function FilesList() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Statuses</SelectItem>
-                    <SelectItem value="active">Active</SelectItem>
-                    <SelectItem value="archived">Archived</SelectItem>
-                    <SelectItem value="missing">Missing</SelectItem>
+                    <SelectItem value="Active">Active</SelectItem>
+                    <SelectItem value="Archived">Archived</SelectItem>
+                    <SelectItem value="Missing">Missing</SelectItem>
                   </SelectContent>
                 </Select>
 
@@ -376,20 +376,20 @@ export function FilesList() {
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem
-                              onClick={() => handleStatusChange(file.id, "active")}
-                              disabled={file.status === "active"}
+                              onClick={() => handleStatusChange(file.id, "Active")}
+                              disabled={file.status === "Active"}
                             >
                               Mark as Active
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                              onClick={() => handleStatusChange(file.id, "archived")}
-                              disabled={file.status === "archived"}
+                              onClick={() => handleStatusChange(file.id, "Archived")}
+                              disabled={file.status === "Archived"}
                             >
                               Mark as Archived
                             </DropdownMenuItem>
                             <DropdownMenuItem
-                              onClick={() => handleStatusChange(file.id, "missing")}
-                              disabled={file.status === "missing"}
+                              onClick={() => handleStatusChange(file.id, "Missing")}
+                              disabled={file.status === "Missing"}
                             >
                               Mark as Missing
                             </DropdownMenuItem>
