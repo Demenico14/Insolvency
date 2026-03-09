@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils"
 import { useState } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
+import Image from "next/image";
 
 const menuItems = [
   { icon: LayoutDashboard, label: "Dashboard", href: "/" },
@@ -27,12 +28,19 @@ export function Sidebar() {
     <aside className="fixed top-0 left-0 w-64 bg-card border-r border-border p-4 h-screen overflow-y-auto lg:block">
       <div className="flex items-center gap-2 mb-6 group cursor-pointer">
         <Link href="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center transition-transform group-hover:scale-110 duration-300">
-            <FolderOpen className="w-4 h-4 text-primary-foreground" />
+          <div className="w-8 h-8 relative flex-shrink-0 transition-transform group-hover:scale-110 duration-300">
+            <Image
+              src="/logo.png"
+              alt="Insolvency Logo"
+              fill
+              className="object-contain"
+            />
           </div>
+
           <div className="flex flex-col">
-            <span className="text-sm font-semibold text-foreground leading-tight">Insolvency</span>
-            <span className="text-[10px] text-muted-foreground leading-tight">File & Records</span>
+            <span className="text-sm font-semibold text-foreground leading-tight">
+              Insolvency
+            </span>
           </div>
         </Link>
       </div>
