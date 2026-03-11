@@ -4,80 +4,79 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Updated theme colors to match the green and white dashboard design */
-  --background: oklch(0.98 0.005 120);
-  --foreground: oklch(0.25 0.02 120);
+  /* Navy blue light theme */
+  --background: oklch(0.98 0.005 240);
+  --foreground: oklch(0.18 0.03 240);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.25 0.02 120);
+  --card-foreground: oklch(0.18 0.03 240);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.25 0.02 120);
-  --primary: oklch(0.42 0.15 155);
-  --primary-foreground: oklch(0.98 0.01 155);
-  --secondary: oklch(0.96 0.01 120);
-  --secondary-foreground: oklch(0.25 0.02 120);
-  --muted: oklch(0.96 0.01 120);
-  --muted-foreground: oklch(0.55 0.02 120);
-  --accent: oklch(0.55 0.18 155);
-  --accent-foreground: oklch(0.98 0.01 155);
+  --popover-foreground: oklch(0.18 0.03 240);
+  --primary: oklch(0.38 0.18 240);
+  --primary-foreground: oklch(0.98 0.01 240);
+  --secondary: oklch(0.95 0.015 240);
+  --secondary-foreground: oklch(0.18 0.03 240);
+  --muted: oklch(0.95 0.015 240);
+  --muted-foreground: oklch(0.52 0.03 240);
+  --accent: oklch(0.50 0.20 240);
+  --accent-foreground: oklch(0.98 0.01 240);
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.98 0.01 0);
-  --border: oklch(0.92 0.01 120);
-  --input: oklch(0.92 0.01 120);
-  --ring: oklch(0.42 0.15 155);
-  --chart-1: oklch(0.42 0.15 155);
-  --chart-2: oklch(0.55 0.18 155);
-  --chart-3: oklch(0.65 0.12 155);
-  --chart-4: oklch(0.75 0.08 155);
-  --chart-5: oklch(0.85 0.04 155);
+  --border: oklch(0.90 0.015 240);
+  --input: oklch(0.90 0.015 240);
+  --ring: oklch(0.38 0.18 240);
+  --chart-1: oklch(0.38 0.18 240);
+  --chart-2: oklch(0.50 0.20 240);
+  --chart-3: oklch(0.62 0.16 240);
+  --chart-4: oklch(0.72 0.10 240);
+  --chart-5: oklch(0.82 0.05 240);
   --radius: 1rem;
   --sidebar: oklch(1 0 0);
-  --sidebar-foreground: oklch(0.25 0.02 120);
-  --sidebar-primary: oklch(0.42 0.15 155);
-  --sidebar-primary-foreground: oklch(0.98 0.01 155);
-  --sidebar-accent: oklch(0.96 0.01 120);
-  --sidebar-accent-foreground: oklch(0.25 0.02 120);
-  --sidebar-border: oklch(0.92 0.01 120);
-  --sidebar-ring: oklch(0.42 0.15 155);
+  --sidebar-foreground: oklch(0.18 0.03 240);
+  --sidebar-primary: oklch(0.38 0.18 240);
+  --sidebar-primary-foreground: oklch(0.98 0.01 240);
+  --sidebar-accent: oklch(0.95 0.015 240);
+  --sidebar-accent-foreground: oklch(0.18 0.03 240);
+  --sidebar-border: oklch(0.90 0.015 240);
+  --sidebar-ring: oklch(0.38 0.18 240);
 }
 
 .dark {
-  /* Updated dark mode colors to match green theme */
-  --background: oklch(0.12 0.01 155);
-  --foreground: oklch(0.98 0.005 155);
-  --card: oklch(0.15 0.01 155);
-  --card-foreground: oklch(0.98 0.005 155);
-  --popover: oklch(0.15 0.01 155);
-  --popover-foreground: oklch(0.98 0.005 155);
-  --primary: oklch(0.55 0.18 155);
-  --primary-foreground: oklch(0.98 0.01 155);
-  --secondary: oklch(0.2 0.02 155);
-  --secondary-foreground: oklch(0.98 0.005 155);
-  --muted: oklch(0.2 0.02 155);
-  --muted-foreground: oklch(0.65 0.02 155);
-  --accent: oklch(0.55 0.18 155);
-  --accent-foreground: oklch(0.98 0.01 155);
+  /* Navy blue dark theme */
+  --background: oklch(0.13 0.025 240);
+  --foreground: oklch(0.95 0.005 240);
+  --card: oklch(0.17 0.025 240);
+  --card-foreground: oklch(0.95 0.005 240);
+  --popover: oklch(0.17 0.025 240);
+  --popover-foreground: oklch(0.95 0.005 240);
+  --primary: oklch(0.58 0.20 240);
+  --primary-foreground: oklch(0.98 0.01 240);
+  --secondary: oklch(0.22 0.03 240);
+  --secondary-foreground: oklch(0.95 0.005 240);
+  --muted: oklch(0.22 0.03 240);
+  --muted-foreground: oklch(0.62 0.03 240);
+  --accent: oklch(0.58 0.20 240);
+  --accent-foreground: oklch(0.98 0.01 240);
   --destructive: oklch(0.5 0.2 25);
   --destructive-foreground: oklch(0.98 0.01 0);
-  --border: oklch(0.25 0.02 155);
-  --input: oklch(0.25 0.02 155);
-  --ring: oklch(0.55 0.18 155);
-  --chart-1: oklch(0.42 0.15 155);
-  --chart-2: oklch(0.55 0.18 155);
-  --chart-3: oklch(0.65 0.12 155);
-  --chart-4: oklch(0.75 0.08 155);
-  --chart-5: oklch(0.85 0.04 155);
-  --sidebar: oklch(0.15 0.01 155);
-  --sidebar-foreground: oklch(0.98 0.005 155);
-  --sidebar-primary: oklch(0.55 0.18 155);
-  --sidebar-primary-foreground: oklch(0.98 0.01 155);
-  --sidebar-accent: oklch(0.2 0.02 155);
-  --sidebar-accent-foreground: oklch(0.98 0.005 155);
-  --sidebar-border: oklch(0.25 0.02 155);
-  --sidebar-ring: oklch(0.55 0.18 155);
+  --border: oklch(0.26 0.03 240);
+  --input: oklch(0.26 0.03 240);
+  --ring: oklch(0.58 0.20 240);
+  --chart-1: oklch(0.38 0.18 240);
+  --chart-2: oklch(0.50 0.20 240);
+  --chart-3: oklch(0.62 0.16 240);
+  --chart-4: oklch(0.72 0.10 240);
+  --chart-5: oklch(0.82 0.05 240);
+  --sidebar: oklch(0.17 0.025 240);
+  --sidebar-foreground: oklch(0.95 0.005 240);
+  --sidebar-primary: oklch(0.58 0.20 240);
+  --sidebar-primary-foreground: oklch(0.98 0.01 240);
+  --sidebar-accent: oklch(0.22 0.03 240);
+  --sidebar-accent-foreground: oklch(0.95 0.005 240);
+  --sidebar-border: oklch(0.26 0.03 240);
+  --sidebar-ring: oklch(0.58 0.20 240);
 }
 
 @theme inline {
-  /* optional: --font-sans, --font-serif, --font-mono if they are applied in the layout.tsx */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -127,84 +126,37 @@
 
 /* Custom animations for smooth card interactions */
 @keyframes float {
-  0%,
-  100% {
-    transform: translateY(0px);
-  }
-  50% {
-    transform: translateY(-5px);
-  }
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-5px); }
 }
 
 @keyframes slideInUp {
-  from {
-    opacity: 0;
-    transform: translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-/* Added barSlideUp animation for modern analytics chart */
 @keyframes barSlideUp {
-  from {
-    transform: scaleY(0);
-    opacity: 0;
-  }
-  to {
-    transform: scaleY(1);
-    opacity: 1;
-  }
+  from { transform: scaleY(0); opacity: 0; }
+  to { transform: scaleY(1); opacity: 1; }
 }
 
 @keyframes pulse-ring {
-  0% {
-    box-shadow: 0 0 0 0 rgba(66, 153, 225, 0.4);
-  }
-  70% {
-    box-shadow: 0 0 0 10px rgba(66, 153, 225, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(66, 153, 225, 0);
-  }
+  0% { box-shadow: 0 0 0 0 rgba(66, 107, 225, 0.4); }
+  70% { box-shadow: 0 0 0 10px rgba(66, 107, 225, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(66, 107, 225, 0); }
 }
 
-/* Added shimmer and fade-in animations for chart interactions */
 @keyframes shimmer {
-  0% {
-    transform: translateX(-100%);
-  }
-  100% {
-    transform: translateX(100%);
-  }
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
 }
 
 @keyframes fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-.animate-float {
-  animation: float 3s ease-in-out infinite;
-}
-
-.animate-slide-in-up {
-  animation: slideInUp 0.5s ease-out forwards;
-}
-
-/* Added utility classes for new animations */
-.animate-shimmer {
-  animation: shimmer 1.5s ease-in-out infinite;
-}
-
-.animate-fade-in {
-  animation: fade-in 0.2s ease-out forwards;
-}
+.animate-float { animation: float 3s ease-in-out infinite; }
+.animate-slide-in-up { animation: slideInUp 0.5s ease-out forwards; }
+.animate-shimmer { animation: shimmer 1.5s ease-in-out infinite; }
+.animate-fade-in { animation: fade-in 0.2s ease-out forwards; }
