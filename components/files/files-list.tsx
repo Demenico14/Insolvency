@@ -24,7 +24,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { FolderOpen, Search, Filter, MoreHorizontal, Eye, Pencil, Trash2, ChevronLeft, ChevronRight, Loader2, X, RefreshCw } from "lucide-react"
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet"
+import { ScrollArea } from "@/components/ui/scroll-area"
+import { Separator } from "@/components/ui/separator"
+import { FolderOpen, Search, Filter, MoreHorizontal, Eye, Pencil, Trash2, ChevronLeft, ChevronRight, Loader2, X, RefreshCw, Download, FileText, FileIcon, ExternalLink } from "lucide-react"
 import { getFiles, deleteFile, updateFileStatus, type FileRecord, type FilesFilter } from "@/app/files/actions"
 import { getCategories, getOfficers } from "@/app/register/actions"
 import Link from "next/link"
@@ -58,6 +67,8 @@ export function FilesList() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [fileToDelete, setFileToDelete] = useState<FileRecord | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [detailsSheetOpen, setDetailsSheetOpen] = useState(false)
+  const [selectedFile, setSelectedFile] = useState<FileRecord | null>(null)
 
   const [filters, setFilters] = useState<FilesFilter>({
     search: "",
@@ -145,6 +156,46 @@ export function FilesList() {
   const handleStatusChange = async (fileId: string, newStatus: string) => {
     await updateFileStatus(fileId, newStatus)
     loadFiles()
+  }
+
+  const handleViewDetails = (file: FileRecord) => {
+    setSelectedFile(file)
+    setDetailsSheetOpen(true)
+  }
+
+  const handleDownload = async (url: string, filename: string) => {
+    try {
+      const response = await fetch(url)
+      const blob = await response.blob()
+      const downloadUrl = window.URL.createObjectURL(blob)
+      const link = document.createElement("a")
+      link.href = downloadUrl
+      link.download = filename
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      window.URL.revokeObjectURL(downloadUrl)
+    } catch (error) {
+      console.error("Download failed:", error)
+    }
+  }
+
+  const getFileType = (url: string | null, filename: string | null): string => {
+    if (!url && !filename) return "unknown"
+    const name = filename || url || ""
+    const ext = name.split(".").pop()?.toLowerCase() || ""
+    if (ext === "pdf") return "pdf"
+    if (["doc", "docx"].includes(ext)) return "word"
+    if (["jpg", "jpeg", "png", "gif", "webp"].includes(ext)) return "image"
+    return "unknown"
+  }
+
+  const isPdfFile = (url: string | null, filename: string | null): boolean => {
+    return getFileType(url, filename) === "pdf"
+  }
+
+  const isImageFile = (url: string | null, filename: string | null): boolean => {
+    return getFileType(url, filename) === "image"
   }
 
   const formatDate = (dateString: string) => {
@@ -362,11 +413,9 @@ export function FilesList() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            <DropdownMenuItem asChild>
-                              <Link href={`/files/${file.id}`} className="flex items-center">
-                                <Eye className="w-4 h-4 mr-2" />
-                                View Details
-                              </Link>
+                            <DropdownMenuItem onClick={() => handleViewDetails(file)}>
+                              <Eye className="w-4 h-4 mr-2" />
+                              View Details
                             </DropdownMenuItem>
                             <DropdownMenuItem asChild>
                               <Link href={`/files/${file.id}/edit`} className="flex items-center">
@@ -471,6 +520,197 @@ export function FilesList() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* File Details Sheet with Document Viewer */}
+      <Sheet open={detailsSheetOpen} onOpenChange={setDetailsSheetOpen}>
+        <SheetContent side="right" className="w-full sm:max-w-2xl lg:max-w-4xl p-0 flex flex-col">
+          <SheetHeader className="p-6 pb-4 border-b border-border">
+            <SheetTitle className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <FileText className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <span className="text-lg">{selectedFile?.file_reference}</span>
+                {selectedFile && (
+                  <Badge className={`ml-3 capitalize border ${statusColors[selectedFile.status] || ""}`}>
+                    {selectedFile.status}
+                  </Badge>
+                )}
+              </div>
+            </SheetTitle>
+            <SheetDescription>
+              {selectedFile?.client_name}
+            </SheetDescription>
+          </SheetHeader>
+          
+          <ScrollArea className="flex-1">
+            <div className="p-6 space-y-6">
+              {/* File Details */}
+              <div className="space-y-4">
+                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">File Information</h3>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Category</p>
+                    <p className="text-sm text-foreground">
+                      {selectedFile?.category ? `${selectedFile.category.code} - ${selectedFile.category.name}` : "-"}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Registration ID</p>
+                    <p className="text-sm text-foreground">{selectedFile?.registration_id || "-"}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Date Received</p>
+                    <p className="text-sm text-foreground">
+                      {selectedFile?.date_received ? formatDate(selectedFile.date_received) : "-"}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Physical Location</p>
+                    <p className="text-sm text-foreground">{selectedFile?.physical_location || "-"}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Assigned Officer</p>
+                    <p className="text-sm text-foreground">{selectedFile?.officer?.name || "-"}</p>
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground">Created</p>
+                    <p className="text-sm text-foreground">
+                      {selectedFile?.created_at ? formatDate(selectedFile.created_at) : "-"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Document Preview Section */}
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Document Preview</h3>
+                  {selectedFile?.document_url && selectedFile?.document_name && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleDownload(selectedFile.document_url!, selectedFile.document_name!)}
+                      >
+                        <Download className="w-4 h-4 mr-2" />
+                        Download
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.open(selectedFile.document_url!, "_blank")}
+                      >
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        Open
+                      </Button>
+                    </div>
+                  )}
+                </div>
+                
+                {selectedFile?.document_url ? (
+                  <div className="rounded-lg border border-border bg-muted/30 overflow-hidden">
+                    {/* PDF Viewer */}
+                    {isPdfFile(selectedFile.document_url, selectedFile.document_name) && (
+                      <div className="aspect-[3/4] w-full">
+                        <iframe
+                          src={`${selectedFile.document_url}#toolbar=0&navpanes=0`}
+                          className="w-full h-full border-0"
+                          title={selectedFile.document_name || "Document Preview"}
+                        />
+                      </div>
+                    )}
+                    
+                    {/* Image Viewer */}
+                    {isImageFile(selectedFile.document_url, selectedFile.document_name) && (
+                      <div className="p-4 flex items-center justify-center">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={selectedFile.document_url}
+                          alt={selectedFile.document_name || "Document Preview"}
+                          className="max-w-full max-h-[500px] object-contain rounded-lg"
+                        />
+                      </div>
+                    )}
+                    
+                    {/* Word/Other Document - Show download prompt */}
+                    {!isPdfFile(selectedFile.document_url, selectedFile.document_name) && 
+                     !isImageFile(selectedFile.document_url, selectedFile.document_name) && (
+                      <div className="p-8 text-center">
+                        <div className="w-16 h-16 mx-auto rounded-lg bg-primary/10 flex items-center justify-center mb-4">
+                          <FileIcon className="w-8 h-8 text-primary" />
+                        </div>
+                        <h4 className="text-lg font-medium text-foreground mb-2">
+                          {selectedFile.document_name}
+                        </h4>
+                        <p className="text-sm text-muted-foreground mb-4">
+                          This document type cannot be previewed directly. Please download to view.
+                        </p>
+                        <div className="flex items-center justify-center gap-2">
+                          <Button
+                            onClick={() => handleDownload(selectedFile.document_url!, selectedFile.document_name!)}
+                          >
+                            <Download className="w-4 h-4 mr-2" />
+                            Download Document
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => window.open(selectedFile.document_url!, "_blank")}
+                          >
+                            <ExternalLink className="w-4 h-4 mr-2" />
+                            Open in New Tab
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Document Info Footer */}
+                    <div className="px-4 py-3 bg-muted/50 border-t border-border flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <FileText className="w-4 h-4 text-muted-foreground" />
+                        <span className="text-sm text-muted-foreground truncate max-w-[300px]">
+                          {selectedFile.document_name}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-border bg-muted/20 p-8 text-center">
+                    <div className="w-16 h-16 mx-auto rounded-lg bg-muted flex items-center justify-center mb-4">
+                      <FileIcon className="w-8 h-8 text-muted-foreground" />
+                    </div>
+                    <h4 className="text-lg font-medium text-foreground mb-2">No Document Attached</h4>
+                    <p className="text-sm text-muted-foreground">
+                      This file does not have any documents attached. You can add a document by editing the file.
+                    </p>
+                    <Button variant="outline" className="mt-4" asChild>
+                      <Link href={`/files/${selectedFile?.id}/edit`}>
+                        <Pencil className="w-4 h-4 mr-2" />
+                        Edit File
+                      </Link>
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </ScrollArea>
+          
+          {/* Footer Actions */}
+          <div className="p-4 border-t border-border flex items-center justify-between bg-background">
+            <Button variant="outline" asChild>
+              <Link href={`/files/${selectedFile?.id}/edit`}>
+                <Pencil className="w-4 h-4 mr-2" />
+                Edit File
+              </Link>
+            </Button>
+            <Button variant="ghost" onClick={() => setDetailsSheetOpen(false)}>
+              Close
+            </Button>
+          </div>
+        </SheetContent>
+      </Sheet>
     </div>
   )
 }
