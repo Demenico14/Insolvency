@@ -267,11 +267,9 @@ export function DashboardContent() {
                 <div key={cat.code} className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Badge variant="outline" className="text-xs">
-                      {cat.code}
-                    </Badge>
-                    <span className="text-sm text-muted-foreground truncate max-w-[150px]">
                       {cat.name}
-                    </span>
+                    </Badge>
+                    
                   </div>
                   <span className="text-sm font-medium">{cat.count}</span>
                 </div>
