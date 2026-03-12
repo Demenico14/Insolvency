@@ -11,6 +11,8 @@ export interface FileRecord {
   physical_location: string | null
   status: string
   created_at: string
+  document_url: string | null
+  document_name: string | null
   category: {
     id: string
     code: string
@@ -57,6 +59,8 @@ export async function getFiles(
       physical_location,
       status,
       created_at,
+      document_url,
+      document_name,
       category:categories(id, code, name),
       officer:officers(id, name)
     `, { count: "exact" })
@@ -130,6 +134,8 @@ export async function getFileById(id: string): Promise<FileRecord | null> {
       physical_location,
       status,
       created_at,
+      document_url,
+      document_name,
       category:categories(id, code, name),
       officer:officers(id, name)
     `)
