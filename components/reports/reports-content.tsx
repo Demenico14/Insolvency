@@ -18,6 +18,8 @@ import {
   TrendingUp
 } from "lucide-react"
 import { getReportData, exportReportCSV, type ReportPeriod, type ReportData } from "@/app/reports/actions"
+import { useUserWithRole } from "@/lib/rbac/use-user-role"
+import { Lock } from "lucide-react"
 import {
   BarChart,
   Bar,
@@ -47,6 +49,12 @@ export function ReportsContent() {
   const [data, setData] = useState<ReportData | null>(null)
   const [loading, setLoading] = useState(true)
   const [exporting, setExporting] = useState(false)
+
+  // RBAC permissions
+  const { isSupervisor, permissions } = useUserWithRole()
+  const canViewAllReports = permissions.includes('reports:read_all')
+  const canExportReports = permissions.includes('reports:export')
+  const hasRestrictedAccess = !canViewAllReports && !isSupervisor
 
   const loadData = useCallback(async () => {
     setLoading(true)
@@ -102,12 +110,39 @@ export function ReportsContent() {
           <Button variant="outline" size="icon" onClick={loadData} disabled={loading}>
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
-          <Button onClick={handleExport} disabled={exporting || !data}>
-            <Download className="w-4 h-4 mr-2" />
-            {exporting ? "Exporting..." : "Export CSV"}
-          </Button>
+          {canExportReports && (
+            <Button onClick={handleExport} disabled={exporting || !data}>
+              <Download className="w-4 h-4 mr-2" />
+              {exporting ? "Exporting..." : "Export CSV"}
+            </Button>
+          )}
+          {!canExportReports && (
+            <Button variant="outline" disabled className="cursor-not-allowed">
+              <Lock className="w-4 h-4 mr-2" />
+              Export (Supervisor Only)
+            </Button>
+          )}
         </div>
       </div>
+
+      {/* Restricted Access Banner for General Users */}
+      {hasRestrictedAccess && (
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="p-2 rounded-lg bg-amber-500/10">
+                <Lock className="w-5 h-5 text-amber-500" />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">Limited Report Access</p>
+                <p className="text-xs text-muted-foreground">
+                  You have access to basic statistics. Contact a supervisor for comprehensive reports and export capabilities.
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {loading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
