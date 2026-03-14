@@ -42,6 +42,7 @@ import {
   User,
   UserX,
   UserCheck,
+  UserPlus,
   ChevronLeft,
   ChevronRight,
   Loader2,
@@ -54,6 +55,7 @@ import {
   toggleUserStatus,
   getUserStats,
   getRoles,
+  createSupervisorAccount,
   type UserRecord,
   type UsersFilter,
 } from "@/app/users/actions"
@@ -94,9 +96,16 @@ export function UsersContent() {
   // Dialog states
   const [roleDialogOpen, setRoleDialogOpen] = useState(false)
   const [statusDialogOpen, setStatusDialogOpen] = useState(false)
+  const [createSupervisorOpen, setCreateSupervisorOpen] = useState(false)
   const [selectedUser, setSelectedUser] = useState<UserRecord | null>(null)
   const [newRole, setNewRole] = useState<RoleName>("general_user")
   const [isUpdating, setIsUpdating] = useState(false)
+
+  // Create supervisor form state
+  const [newSupervisor, setNewSupervisor] = useState({
+    email: '', firstName: '', lastName: '', department: '', password: '',
+  })
+  const [createError, setCreateError] = useState<string | null>(null)
 
   const { user: currentUser } = useUserWithRole()
   const pageSize = 10
@@ -187,6 +196,24 @@ export function UsersContent() {
     }
   }
 
+  const handleCreateSupervisor = async () => {
+    setCreateError(null)
+    if (!newSupervisor.email || !newSupervisor.password || !newSupervisor.firstName) {
+      setCreateError('Email, password and first name are required.')
+      return
+    }
+    setIsUpdating(true)
+    const result = await createSupervisorAccount(newSupervisor)
+    setIsUpdating(false)
+    if (!result.success) {
+      setCreateError(result.error ?? 'Failed to create account')
+      return
+    }
+    setCreateSupervisorOpen(false)
+    setNewSupervisor({ email: '', firstName: '', lastName: '', department: '', password: '' })
+    loadUsers()
+  }
+
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("en-ZA", {
       year: "numeric",
@@ -273,6 +300,14 @@ export function UsersContent() {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Button
+                size="sm"
+                onClick={() => { setCreateError(null); setCreateSupervisorOpen(true) }}
+                className="bg-purple-600 hover:bg-purple-500 text-white"
+              >
+                <UserPlus className="w-4 h-4 mr-2" />
+                New Supervisor
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
@@ -591,6 +626,91 @@ export function UsersContent() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {/* Create Supervisor Dialog */}
+      <Dialog open={createSupervisorOpen} onOpenChange={setCreateSupervisorOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Shield className="w-5 h-5 text-purple-500" />
+              Create Supervisor Account
+            </DialogTitle>
+            <DialogDescription>
+              This account will be created with full supervisor privileges. Only authorized supervisors can perform this action.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>First Name <span className="text-destructive">*</span></Label>
+                <Input
+                  placeholder="First name"
+                  value={newSupervisor.firstName}
+                  onChange={(e) => setNewSupervisor(p => ({ ...p, firstName: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Last Name</Label>
+                <Input
+                  placeholder="Last name"
+                  value={newSupervisor.lastName}
+                  onChange={(e) => setNewSupervisor(p => ({ ...p, lastName: e.target.value }))}
+                />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Email <span className="text-destructive">*</span></Label>
+              <Input
+                type="email"
+                placeholder="supervisor@example.com"
+                value={newSupervisor.email}
+                onChange={(e) => setNewSupervisor(p => ({ ...p, email: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Password <span className="text-destructive">*</span></Label>
+              <Input
+                type="password"
+                placeholder="Min. 8 characters"
+                value={newSupervisor.password}
+                onChange={(e) => setNewSupervisor(p => ({ ...p, password: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Department</Label>
+              <Input
+                placeholder="e.g. Operations"
+                value={newSupervisor.department}
+                onChange={(e) => setNewSupervisor(p => ({ ...p, department: e.target.value }))}
+              />
+            </div>
+            {createError && (
+              <p className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
+                {createError}
+              </p>
+            )}
+            <div className="p-3 rounded-lg bg-purple-500/10 border border-purple-500/20 text-xs text-purple-400">
+              <strong>Note:</strong> The new account will be immediately active. The role is set to Supervisor and cannot be changed by the user themselves.
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateSupervisorOpen(false)} disabled={isUpdating}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateSupervisor}
+              disabled={isUpdating}
+              className="bg-purple-600 hover:bg-purple-500"
+            >
+              {isUpdating ? (
+                <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Creating...</>
+              ) : (
+                <><UserPlus className="w-4 h-4 mr-2" />Create Supervisor</>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
     </div>
   )
 }

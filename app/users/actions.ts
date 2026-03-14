@@ -256,3 +256,71 @@ export async function getUserStats(): Promise<{
     generalUsers: profiles.filter(p => p.role?.name === 'general_user' || !p.role).length,
   }
 }
+
+// Create a new supervisor account (supervisor only)
+// Role is enforced server-side — the caller cannot influence it.
+export async function createSupervisorAccount(data: {
+  email: string
+  password: string
+  firstName: string
+  lastName: string
+  department?: string
+}): Promise<{ success: boolean; error?: string }> {
+  const currentUser = await getCurrentUserWithRole()
+
+  if (!currentUser || currentUser.role !== 'supervisor') {
+    return { success: false, error: 'Unauthorized — only supervisors can create supervisor accounts' }
+  }
+
+  const supabase = await createClient()
+
+  // Create auth user via admin API
+  const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
+    email: data.email,
+    password: data.password,
+    email_confirm: true, // skip email confirmation for admin-created accounts
+    user_metadata: {
+      first_name: data.firstName,
+      last_name: data.lastName,
+      department: data.department ?? '',
+      // No role in metadata — profile is created below with enforced supervisor role
+    },
+  })
+
+  if (createError || !newUser.user) {
+    return { success: false, error: createError?.message ?? 'Failed to create auth user' }
+  }
+
+  // Resolve supervisor role ID
+  const { data: roleData, error: roleError } = await supabase
+    .from('roles')
+    .select('id')
+    .eq('name', 'supervisor')
+    .single()
+
+  if (roleError || !roleData) {
+    return { success: false, error: 'Supervisor role not found in database' }
+  }
+
+  // Create profile with supervisor role and record who created it
+  const { error: profileError } = await supabase
+    .from('user_profiles')
+    .upsert(
+      {
+        user_id: newUser.user.id,
+        role_id: roleData.id,
+        first_name: data.firstName,
+        last_name: data.lastName,
+        department: data.department ?? null,
+        is_active: true,
+        created_by: currentUser.id,
+      },
+      { onConflict: 'user_id' }
+    )
+
+  if (profileError) {
+    return { success: false, error: profileError.message }
+  }
+
+  return { success: true }
+}

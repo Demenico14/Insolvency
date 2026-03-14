@@ -4,8 +4,7 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Eye, EyeOff, Shield, User } from "lucide-react";
-import { RoleName } from "@/lib/rbac/types";
+import { Eye, EyeOff } from "lucide-react";
 
 type AuthMode = "sign-in" | "sign-up" | "forgot-password";
 
@@ -18,7 +17,6 @@ export default function AuthPage() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [department, setDepartment] = useState("");
-  const [selectedRole, setSelectedRole] = useState<RoleName>("general_user");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -45,34 +43,35 @@ export default function AuthPage() {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: { 
-            data: { 
+          options: {
+            data: {
               full_name: fullName,
-              role: selectedRole,
               first_name: firstName,
               last_name: lastName,
               department: department,
-            } 
+              // role is intentionally omitted — backend always assigns general_user
+            },
           },
         });
         if (error) throw error;
 
-        // If user was created, assign the role via server action
+        // Create profile via server — role is enforced server-side as general_user
         if (data.user) {
           const response = await fetch('/api/auth/assign-role', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               userId: data.user.id,
-              role: selectedRole,
               firstName,
               lastName,
               department,
+              // no role field — backend decides
             }),
           });
 
           if (!response.ok) {
-            console.error('Failed to assign role');
+            const body = await response.json().catch(() => ({}));
+            console.error('Failed to create user profile:', body);
           }
         }
 
@@ -108,7 +107,6 @@ export default function AuthPage() {
     setPassword("");
     setFullName("");
     setDepartment("");
-    setSelectedRole("general_user");
   };
 
   return (
@@ -218,7 +216,7 @@ export default function AuthPage() {
                   onChange={(e) => setFullName(e.target.value)}
                   className="w-full rounded-xl bg-[#f0ede6]/6 border border-[#f0ede6]/10 px-4 py-3 text-sm text-[#f0ede6] placeholder:text-[#f0ede6]/30 outline-none focus:border-blue-500/50 focus:bg-[#f0ede6]/8 transition-all"
                 />
-                
+
                 <input
                   type="text"
                   placeholder="Department (optional)"
@@ -226,43 +224,6 @@ export default function AuthPage() {
                   onChange={(e) => setDepartment(e.target.value)}
                   className="w-full rounded-xl bg-[#f0ede6]/6 border border-[#f0ede6]/10 px-4 py-3 text-sm text-[#f0ede6] placeholder:text-[#f0ede6]/30 outline-none focus:border-blue-500/50 focus:bg-[#f0ede6]/8 transition-all"
                 />
-
-                {/* Role Selection */}
-                <div className="space-y-2">
-                  <label className="text-xs text-[#f0ede6]/50 font-medium">Select your role</label>
-                  <div className="grid grid-cols-2 gap-3">
-                    <button
-                      type="button"
-                      onClick={() => setSelectedRole("general_user")}
-                      className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-all ${
-                        selectedRole === "general_user"
-                          ? "bg-blue-500/15 border-blue-500/50 text-blue-400"
-                          : "bg-[#f0ede6]/6 border-[#f0ede6]/10 text-[#f0ede6]/60 hover:border-[#f0ede6]/20"
-                      }`}
-                    >
-                      <User className="w-5 h-5" />
-                      <div className="text-center">
-                        <p className="text-sm font-medium">General User</p>
-                        <p className="text-xs opacity-60 mt-0.5">Standard access</p>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedRole("supervisor")}
-                      className={`flex flex-col items-center gap-2 p-4 rounded-xl border transition-all ${
-                        selectedRole === "supervisor"
-                          ? "bg-blue-500/15 border-blue-500/50 text-blue-400"
-                          : "bg-[#f0ede6]/6 border-[#f0ede6]/10 text-[#f0ede6]/60 hover:border-[#f0ede6]/20"
-                      }`}
-                    >
-                      <Shield className="w-5 h-5" />
-                      <div className="text-center">
-                        <p className="text-sm font-medium">Supervisor</p>
-                        <p className="text-xs opacity-60 mt-0.5">Full access</p>
-                      </div>
-                    </button>
-                  </div>
-                </div>
               </>
             )}
 
