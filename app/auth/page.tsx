@@ -18,6 +18,7 @@ export default function AuthPage() {
   const [fullName, setFullName] = useState("");
   const [department, setDepartment] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -35,6 +36,18 @@ export default function AuthPage() {
         if (error) throw error;
         setSuccessMsg("Reset link sent — check your email.");
       } else if (mode === "sign-up") {
+        // Validate passwords match before hitting the server
+        if (password !== confirmPassword) {
+          setError("Passwords do not match.");
+          setLoading(false);
+          return;
+        }
+        if (password.length < 6) {
+          setError("Password must be at least 6 characters.");
+          setLoading(false);
+          return;
+        }
+
         // Parse first and last name from full name
         const nameParts = fullName.trim().split(" ");
         const firstName = nameParts[0] || "";
@@ -75,7 +88,7 @@ export default function AuthPage() {
           }
         }
 
-        setSuccessMsg("Account created! Check your email to confirm.");
+        setSuccessMsg("Account created! You can now sign in.");
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
@@ -107,6 +120,7 @@ export default function AuthPage() {
     setPassword("");
     setFullName("");
     setDepartment("");
+    setConfirmPassword("");
   };
 
   return (
@@ -254,6 +268,17 @@ export default function AuthPage() {
                   {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+            )}
+
+            {mode === "sign-up" && (
+              <input
+                type="password"
+                placeholder="Confirm password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSubmit()}
+                className="w-full rounded-xl bg-[#f0ede6]/6 border border-[#f0ede6]/10 px-4 py-3 text-sm text-[#f0ede6] placeholder:text-[#f0ede6]/30 outline-none focus:border-blue-500/50 focus:bg-[#f0ede6]/8 transition-all"
+              />
             )}
 
             {mode === "sign-in" && (
