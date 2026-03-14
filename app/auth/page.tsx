@@ -4,7 +4,8 @@ import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, User, Shield } from "lucide-react";
+import type { UserRole } from "@/lib/rbac/types";
 
 type AuthMode = "sign-in" | "sign-up" | "forgot-password";
 
@@ -16,6 +17,7 @@ export default function AuthPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
+  const [role, setRole] = useState<UserRole>("user");
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -37,7 +39,12 @@ export default function AuthPage() {
         const { error } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { full_name: fullName } },
+          options: { 
+            data: { 
+              full_name: fullName,
+              role: role,
+            } 
+          },
         });
         if (error) throw error;
         setSuccessMsg("Account created! Check your email to confirm.");
@@ -61,6 +68,7 @@ export default function AuthPage() {
     setEmail("");
     setPassword("");
     setFullName("");
+    setRole("user");
   };
 
   return (
@@ -162,13 +170,61 @@ export default function AuthPage() {
           {/* Fields */}
           <div className="flex flex-col gap-3">
             {mode === "sign-up" && (
-              <input
-                type="text"
-                placeholder="Full name"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-                className="w-full rounded-xl bg-[#f0ede6]/6 border border-[#f0ede6]/10 px-4 py-3 text-sm text-[#f0ede6] placeholder:text-[#f0ede6]/30 outline-none focus:border-blue-500/50 focus:bg-[#f0ede6]/8 transition-all"
-              />
+              <>
+                <input
+                  type="text"
+                  placeholder="Full name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="w-full rounded-xl bg-[#f0ede6]/6 border border-[#f0ede6]/10 px-4 py-3 text-sm text-[#f0ede6] placeholder:text-[#f0ede6]/30 outline-none focus:border-blue-500/50 focus:bg-[#f0ede6]/8 transition-all"
+                />
+                
+                {/* Role Selection */}
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs text-[#f0ede6]/50 font-medium">Select your role</label>
+                  <div className="grid grid-cols-2 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => setRole("user")}
+                      className={`flex items-center gap-3 p-4 rounded-xl border transition-all ${
+                        role === "user"
+                          ? "bg-blue-500/15 border-blue-500/40 text-[#f0ede6]"
+                          : "bg-[#f0ede6]/6 border-[#f0ede6]/10 text-[#f0ede6]/60 hover:border-[#f0ede6]/20"
+                      }`}
+                    >
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                        role === "user" ? "bg-blue-500/20" : "bg-[#f0ede6]/10"
+                      }`}>
+                        <User className="w-5 h-5" />
+                      </div>
+                      <div className="text-left">
+                        <p className="text-sm font-medium">General User</p>
+                        <p className="text-xs text-[#f0ede6]/40">Standard access</p>
+                      </div>
+                    </button>
+                    
+                    <button
+                      type="button"
+                      onClick={() => setRole("supervisor")}
+                      className={`flex items-center gap-3 p-4 rounded-xl border transition-all ${
+                        role === "supervisor"
+                          ? "bg-blue-500/15 border-blue-500/40 text-[#f0ede6]"
+                          : "bg-[#f0ede6]/6 border-[#f0ede6]/10 text-[#f0ede6]/60 hover:border-[#f0ede6]/20"
+                      }`}
+                    >
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${
+                        role === "supervisor" ? "bg-blue-500/20" : "bg-[#f0ede6]/10"
+                      }`}>
+                        <Shield className="w-5 h-5" />
+                      </div>
+                      <div className="text-left">
+                        <p className="text-sm font-medium">Supervisor</p>
+                        <p className="text-xs text-[#f0ede6]/40">Full access</p>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              </>
             )}
 
             <input
