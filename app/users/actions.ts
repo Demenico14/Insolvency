@@ -51,6 +51,7 @@ export async function getUsers(
       first_name,
       last_name,
       department,
+      email,
       is_active,
       created_at,
       updated_at,
@@ -82,16 +83,13 @@ export async function getUsers(
     return { users: [], totalCount: 0, totalPages: 0 }
   }
 
-  // Get auth user data for emails
-  const userIds = profiles.map(p => p.user_id)
-  
-  // Map profiles to UserRecord
+  // Map profiles to UserRecord - email is now stored in user_profiles table
   const users: UserRecord[] = profiles.map(profile => {
     const roleName = (profile.role?.name || 'general_user') as RoleName
     
     return {
       id: profile.user_id,
-      email: 'Loading...', // Will be populated separately
+      email: profile.email || `User ${profile.user_id.slice(0, 8)}`,
       first_name: profile.first_name,
       last_name: profile.last_name,
       department: profile.department,

@@ -1,7 +1,7 @@
 "use client"
 
 import { useEffect, useState, useCallback } from "react"
-import { Search, Bell, FileText, AlertCircle, CheckCircle2, Clock, X } from "lucide-react"
+import { Search, Bell, FileText, AlertCircle, CheckCircle2, Clock, X, FolderPlus } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
@@ -9,67 +9,13 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { MobileNav } from "./mobile-nav"
 import { createClient } from "@/lib/supabase/client"
-
-interface Notification {
-  id: string
-  type: "file_update" | "status_change" | "deadline" | "system"
-  title: string
-  message: string
-  timestamp: Date
-  read: boolean
-  fileRef?: string
-}
-
-// Generate context-aware notifications based on insolvency file management
-const generateNotifications = (): Notification[] => {
-  const now = new Date()
-  return [
-    {
-      id: "1",
-      type: "status_change",
-      title: "File Status Updated",
-      message: "INS-2024-0042 has been moved to 'Active' status",
-      timestamp: new Date(now.getTime() - 1000 * 60 * 15), // 15 mins ago
-      read: false,
-      fileRef: "INS-2024-0042"
-    },
-    {
-      id: "2",
-      type: "deadline",
-      title: "Upcoming Deadline",
-      message: "Review deadline for INS-2024-0038 is in 2 days",
-      timestamp: new Date(now.getTime() - 1000 * 60 * 45), // 45 mins ago
-      read: false,
-      fileRef: "INS-2024-0038"
-    },
-    {
-      id: "3",
-      type: "file_update",
-      title: "Document Uploaded",
-      message: "New document added to INS-2024-0035",
-      timestamp: new Date(now.getTime() - 1000 * 60 * 60 * 2), // 2 hours ago
-      read: false,
-      fileRef: "INS-2024-0035"
-    },
-    {
-      id: "4",
-      type: "system",
-      title: "Weekly Report Ready",
-      message: "Your weekly insolvency summary is now available",
-      timestamp: new Date(now.getTime() - 1000 * 60 * 60 * 5), // 5 hours ago
-      read: true
-    },
-    {
-      id: "5",
-      type: "status_change",
-      title: "File Closed",
-      message: "INS-2024-0029 has been marked as 'Closed'",
-      timestamp: new Date(now.getTime() - 1000 * 60 * 60 * 24), // 1 day ago
-      read: true,
-      fileRef: "INS-2024-0029"
-    }
-  ]
-}
+import { 
+  getNotifications, 
+  markNotificationAsRead, 
+  markAllNotificationsAsRead, 
+  deleteNotification,
+  type Notification 
+} from "@/app/notifications/actions"
 
 export function Header() {
   const supabase = createClient()
@@ -77,7 +23,17 @@ export function Header() {
   const [email, setEmail] = useState("")
   const [avatarUrl, setAvatarUrl] = useState("")
   const [notifications, setNotifications] = useState<Notification[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
   const [isNotificationsOpen, setIsNotificationsOpen] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+
+  const loadNotifications = useCallback(async () => {
+    setIsLoading(true)
+    const result = await getNotifications(20)
+    setNotifications(result.notifications)
+    setUnreadCount(result.unreadCount)
+    setIsLoading(false)
+  }, [])
 
   useEffect(() => {
     const loadUser = async () => {
@@ -90,9 +46,28 @@ export function Header() {
     }
     loadUser()
     
-    // Load notifications
-    setNotifications(generateNotifications())
-  }, [])
+    // Load real notifications from database
+    loadNotifications()
+
+    // Set up real-time subscription for new notifications
+    const channel = supabase
+      .channel('notifications')
+      .on('postgres_changes', 
+        { 
+          event: 'INSERT', 
+          schema: 'public', 
+          table: 'notifications' 
+        }, 
+        () => {
+          loadNotifications()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [loadNotifications, supabase])
 
   const initials = fullName
     .split(" ")
@@ -101,23 +76,41 @@ export function Header() {
     .toUpperCase()
     .slice(0, 2) || "?"
 
-  const unreadCount = notifications.filter(n => !n.read).length
-
-  const markAsRead = useCallback((id: string) => {
+  const handleMarkAsRead = useCallback(async (id: string) => {
+    // Optimistically update UI
     setNotifications(prev => 
-      prev.map(n => n.id === id ? { ...n, read: true } : n)
+      prev.map(n => n.id === id ? { ...n, is_read: true } : n)
     )
+    setUnreadCount(prev => Math.max(0, prev - 1))
+    
+    // Update in database
+    await markNotificationAsRead(id)
   }, [])
 
-  const markAllAsRead = useCallback(() => {
-    setNotifications(prev => prev.map(n => ({ ...n, read: true })))
+  const handleMarkAllAsRead = useCallback(async () => {
+    // Optimistically update UI
+    setNotifications(prev => prev.map(n => ({ ...n, is_read: true })))
+    setUnreadCount(0)
+    
+    // Update in database
+    await markAllNotificationsAsRead()
   }, [])
 
-  const dismissNotification = useCallback((id: string) => {
+  const handleDismissNotification = useCallback(async (id: string) => {
+    const notification = notifications.find(n => n.id === id)
+    
+    // Optimistically update UI
     setNotifications(prev => prev.filter(n => n.id !== id))
-  }, [])
+    if (notification && !notification.is_read) {
+      setUnreadCount(prev => Math.max(0, prev - 1))
+    }
+    
+    // Delete from database
+    await deleteNotification(id)
+  }, [notifications])
 
-  const formatTimeAgo = (date: Date): string => {
+  const formatTimeAgo = (dateString: string): string => {
+    const date = new Date(dateString)
     const now = new Date()
     const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000)
     
@@ -129,6 +122,8 @@ export function Header() {
 
   const getNotificationIcon = (type: Notification["type"]) => {
     switch (type) {
+      case "file_assignment":
+        return <FolderPlus className="w-4 h-4 text-blue-500" />
       case "file_update":
         return <FileText className="w-4 h-4 text-primary" />
       case "status_change":
@@ -175,7 +170,7 @@ export function Header() {
                   variant="ghost" 
                   size="sm" 
                   className="text-xs h-7 text-muted-foreground hover:text-foreground"
-                  onClick={markAllAsRead}
+                  onClick={handleMarkAllAsRead}
                 >
                   Mark all read
                 </Button>
@@ -183,13 +178,20 @@ export function Header() {
             </div>
             
             <ScrollArea className="h-[320px]">
-              {notifications.length === 0 ? (
+              {isLoading ? (
+                <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
+                  <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3 animate-pulse">
+                    <Bell className="w-6 h-6 text-muted-foreground" />
+                  </div>
+                  <p className="text-sm text-muted-foreground">Loading notifications...</p>
+                </div>
+              ) : notifications.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-8 px-4 text-center">
                   <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mb-3">
                     <Bell className="w-6 h-6 text-muted-foreground" />
                   </div>
                   <p className="text-sm font-medium text-foreground">No notifications</p>
-                  <p className="text-xs text-muted-foreground mt-1">You're all caught up!</p>
+                  <p className="text-xs text-muted-foreground mt-1">You&apos;ll be notified when files are assigned to you</p>
                 </div>
               ) : (
                 <div className="divide-y divide-border">
@@ -197,9 +199,9 @@ export function Header() {
                     <div 
                       key={notification.id}
                       className={`group relative p-4 hover:bg-muted/50 transition-colors cursor-pointer ${
-                        !notification.read ? "bg-primary/5" : ""
+                        !notification.is_read ? "bg-primary/5" : ""
                       }`}
-                      onClick={() => markAsRead(notification.id)}
+                      onClick={() => handleMarkAsRead(notification.id)}
                     >
                       <div className="flex gap-3">
                         <div className="flex-shrink-0 w-8 h-8 rounded-full bg-muted flex items-center justify-center">
@@ -207,14 +209,14 @@ export function Header() {
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-start justify-between gap-2">
-                            <p className={`text-sm leading-tight ${!notification.read ? "font-semibold text-foreground" : "font-medium text-foreground"}`}>
+                            <p className={`text-sm leading-tight ${!notification.is_read ? "font-semibold text-foreground" : "font-medium text-foreground"}`}>
                               {notification.title}
                             </p>
                             <button 
                               className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-muted rounded"
                               onClick={(e) => {
                                 e.stopPropagation()
-                                dismissNotification(notification.id)
+                                handleDismissNotification(notification.id)
                               }}
                             >
                               <X className="w-3 h-3 text-muted-foreground" />
@@ -223,11 +225,16 @@ export function Header() {
                           <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
                             {notification.message}
                           </p>
+                          {notification.file_reference && (
+                            <p className="text-xs text-primary mt-1">
+                              Ref: {notification.file_reference}
+                            </p>
+                          )}
                           <p className="text-xs text-muted-foreground/70 mt-1.5">
-                            {formatTimeAgo(notification.timestamp)}
+                            {formatTimeAgo(notification.created_at)}
                           </p>
                         </div>
-                        {!notification.read && (
+                        {!notification.is_read && (
                           <div className="flex-shrink-0 w-2 h-2 rounded-full bg-primary mt-1.5" />
                         )}
                       </div>

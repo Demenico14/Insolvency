@@ -5,12 +5,13 @@ import { RoleName } from '@/lib/rbac/types'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { userId, role, firstName, lastName, department } = body as {
+    const { userId, role, firstName, lastName, department, email } = body as {
       userId: string
       role: RoleName
       firstName?: string
       lastName?: string
       department?: string
+      email?: string
     }
 
     if (!userId || !role) {
@@ -49,6 +50,7 @@ export async function POST(request: NextRequest) {
           first_name: firstName || null,
           last_name: lastName || null,
           department: department || null,
+          email: email || null,
           is_active: true,
         }, {
           onConflict: 'user_id'
@@ -74,6 +76,7 @@ export async function POST(request: NextRequest) {
         first_name: firstName || null,
         last_name: lastName || null,
         department: department || null,
+        email: email || null,
         is_active: true,
       }, {
         onConflict: 'user_id'
