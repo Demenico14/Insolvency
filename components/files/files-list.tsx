@@ -7,98 +7,103 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Label } from "@/components/ui/label"
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
+  DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
+  AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
+  AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
+  Dialog, DialogContent, DialogDescription, DialogFooter,
+  DialogHeader, DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
-import { FolderOpen, Search, Filter, MoreHorizontal, Eye, Pencil, Trash2, ChevronLeft, ChevronRight, Loader2, X, RefreshCw, Download, FileText, FileIcon, ExternalLink, UserPlus, Lock } from "lucide-react"
-import { getFiles, deleteFile, updateFileStatus, type FileRecord, type FilesFilter } from "@/app/files/actions"
+import {
+  FolderOpen, Search, Filter, MoreHorizontal, Eye, Pencil, Trash2,
+  ChevronLeft, ChevronRight, Loader2, X, RefreshCw, Download, FileText,
+  FileIcon, ExternalLink, UserPlus, Lock,
+} from "lucide-react"
+import {
+  getFiles, deleteFile, updateFileStatus, updateFileMetadata, reassignFileOfficer,
+  type FileRecord, type FilesFilter, type FileMetadataUpdate,
+} from "@/app/files/actions"
 import { getCategories, getOfficers } from "@/app/register/actions"
 import Link from "next/link"
 import { useUserWithRole } from "@/lib/rbac/use-user-role"
 
+// ─── Constants ────────────────────────────────────────────────────────────────
+
 const statusColors: Record<string, string> = {
-  Active: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
+  Active:   "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
   Archived: "bg-amber-500/10 text-amber-500 border-amber-500/20",
-  Missing: "bg-red-500/10 text-red-500 border-red-500/20",
+  Missing:  "bg-red-500/10 text-red-500 border-red-500/20",
 }
 
-interface Category {
-  id: string
-  code: string
-  name: string
-}
+interface Category { id: string; code: string; name: string }
+interface Officer  { id: string; name: string }
 
-interface Officer {
-  id: string
-  name: string
-}
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export function FilesList() {
-  const [files, setFiles] = useState<FileRecord[]>([])
+  const { user, isSupervisor, permissions } = useUserWithRole()
+
+  const canViewAll     = permissions.includes("files:read_all")
+  const canEditAll     = permissions.includes("files:update_all") || isSupervisor
+  const canDelete      = permissions.includes("files:delete")
+  const canReassign    = permissions.includes("files:reassign") || isSupervisor
+  const canCreate      = permissions.includes("files:create")
+
+  // ── Data ──────────────────────────────────────────────────────────────────
+  const [files,      setFiles]      = useState<FileRecord[]>([])
   const [categories, setCategories] = useState<Category[]>([])
-  const [officers, setOfficers] = useState<Officer[]>([])
-  const [isLoading, setIsLoading] = useState(true)
+  const [officers,   setOfficers]   = useState<Officer[]>([])
+  const [isLoading,  setIsLoading]  = useState(true)
   const [totalCount, setTotalCount] = useState(0)
-  const [page, setPage] = useState(1)
+  const [page,       setPage]       = useState(1)
   const [totalPages, setTotalPages] = useState(0)
   const [showFilters, setShowFilters] = useState(false)
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [fileToDelete, setFileToDelete] = useState<FileRecord | null>(null)
-  const [isDeleting, setIsDeleting] = useState(false)
-  const [detailsSheetOpen, setDetailsSheetOpen] = useState(false)
-  const [selectedFile, setSelectedFile] = useState<FileRecord | null>(null)
-
-  // RBAC permissions
-  const { user, isSupervisor, permissions } = useUserWithRole()
-  
-  // Permission checks
-  const canViewAllFiles = permissions.includes('files:read_all')
-  const canEditAllFiles = permissions.includes('files:update_all')
-  const canDeleteFiles = permissions.includes('files:delete')
-  const canReassignFiles = permissions.includes('files:reassign')
-  const canCreateFiles = permissions.includes('files:create')
 
   const [filters, setFilters] = useState<FilesFilter>({
-    search: "",
-    category: "",
-    status: "",
-    officer: "",
-    dateFrom: "",
-    dateTo: "",
+    search: "", category: "", status: "", officer: "", dateFrom: "", dateTo: "",
   })
-
   const pageSize = 10
 
+  // ── Dialog states ─────────────────────────────────────────────────────────
+  const [selectedFile,      setSelectedFile]      = useState<FileRecord | null>(null)
+  const [detailsSheetOpen,  setDetailsSheetOpen]  = useState(false)
+  const [deleteDialogOpen,  setDeleteDialogOpen]  = useState(false)
+  const [fileToDelete,      setFileToDelete]      = useState<FileRecord | null>(null)
+  const [isDeleting,        setIsDeleting]        = useState(false)
+
+  // Edit metadata dialog
+  const [editDialogOpen, setEditDialogOpen] = useState(false)
+  const [editFile,       setEditFile]       = useState<FileRecord | null>(null)
+  const [editForm,       setEditForm]       = useState<FileMetadataUpdate>({
+    client_name: "", registration_id: "", date_received: "",
+    physical_location: "", status: "Active", category_id: "", notes: "",
+  })
+  const [isSaving, setIsSaving] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
+
+  // Reassign dialog
+  const [reassignDialogOpen, setReassignDialogOpen] = useState(false)
+  const [reassignFile,       setReassignFile]       = useState<FileRecord | null>(null)
+  const [newOfficerId,       setNewOfficerId]       = useState("")
+  const [isReassigning,      setIsReassigning]      = useState(false)
+  const [reassignError,      setReassignError]      = useState<string | null>(null)
+
+  // ── Load data ─────────────────────────────────────────────────────────────
   const loadFiles = useCallback(async () => {
     setIsLoading(true)
-    const cleanFilters = Object.fromEntries(
-      Object.entries(filters).filter(([, v]) => v !== "")
-    ) as FilesFilter
-    
-    const result = await getFiles(cleanFilters, page, pageSize)
+    const clean = Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== "")) as FilesFilter
+    const result = await getFiles(clean, page, pageSize)
     setFiles(result.files)
     setTotalCount(result.totalCount)
     setTotalPages(result.totalPages)
@@ -106,120 +111,121 @@ export function FilesList() {
   }, [filters, page])
 
   useEffect(() => {
-    async function loadInitialData() {
-      const [categoriesData, officersData] = await Promise.all([
-        getCategories(),
-        getOfficers(),
-      ])
-      setCategories(categoriesData)
-      setOfficers(officersData)
-    }
-    loadInitialData()
+    Promise.all([getCategories(), getOfficers()]).then(([cats, offs]) => {
+      setCategories(cats)
+      setOfficers(offs)
+    })
   }, [])
 
-  useEffect(() => {
-    loadFiles()
-  }, [loadFiles])
+  useEffect(() => { loadFiles() }, [loadFiles])
 
-  const handleSearch = (value: string) => {
-    setFilters(prev => ({ ...prev, search: value }))
-    setPage(1)
-  }
-
+  // ── Filter helpers ────────────────────────────────────────────────────────
   const handleFilterChange = (key: keyof FilesFilter, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }))
     setPage(1)
   }
-
   const clearFilters = () => {
-    setFilters({
-      search: "",
-      category: "",
-      status: "",
-      officer: "",
-      dateFrom: "",
-      dateTo: "",
-    })
+    setFilters({ search: "", category: "", status: "", officer: "", dateFrom: "", dateTo: "" })
     setPage(1)
   }
-
   const hasActiveFilters = Object.values(filters).some(v => v !== "")
 
-  const handleDeleteClick = (file: FileRecord) => {
-    setFileToDelete(file)
-    setDeleteDialogOpen(true)
-  }
-
+  // ── Delete ────────────────────────────────────────────────────────────────
   const handleConfirmDelete = async () => {
     if (!fileToDelete) return
-    
     setIsDeleting(true)
     const result = await deleteFile(fileToDelete.id)
     setIsDeleting(false)
-    
-    if (result.success) {
-      setDeleteDialogOpen(false)
-      setFileToDelete(null)
-      loadFiles()
-    }
+    if (result.success) { setDeleteDialogOpen(false); setFileToDelete(null); loadFiles() }
   }
 
+  // ── Edit metadata ─────────────────────────────────────────────────────────
+  const openEditDialog = (file: FileRecord) => {
+    setEditFile(file)
+    setEditForm({
+      client_name:       file.client_name,
+      registration_id:   file.registration_id ?? "",
+      date_received:     file.date_received,
+      physical_location: file.physical_location ?? "",
+      status:            file.status,
+      category_id:       file.category?.id ?? "",
+      notes:             "",
+    })
+    setEditError(null)
+    setEditDialogOpen(true)
+  }
+
+  const handleSaveEdit = async () => {
+    if (!editFile) return
+    if (!editForm.client_name.trim()) { setEditError("Client name is required."); return }
+    if (!editForm.date_received)      { setEditError("Date received is required."); return }
+    setIsSaving(true)
+    const result = await updateFileMetadata(editFile.id, editForm)
+    setIsSaving(false)
+    if (!result.success) { setEditError(result.error ?? "Failed to save changes."); return }
+    setEditDialogOpen(false)
+    // Refresh details sheet if open on same file
+    if (detailsSheetOpen && selectedFile?.id === editFile.id) {
+      setSelectedFile(prev => prev ? { ...prev, ...editForm,
+        category: categories.find(c => c.id === editForm.category_id) ?? prev.category,
+      } : prev)
+    }
+    loadFiles()
+  }
+
+  // ── Reassign ──────────────────────────────────────────────────────────────
+  const openReassignDialog = (file: FileRecord) => {
+    setReassignFile(file)
+    setNewOfficerId(file.officer?.id ?? "")
+    setReassignError(null)
+    setReassignDialogOpen(true)
+  }
+
+  const handleConfirmReassign = async () => {
+    if (!reassignFile) return
+    if (!newOfficerId) { setReassignError("Please select an officer."); return }
+    setIsReassigning(true)
+    const result = await reassignFileOfficer(reassignFile.id, newOfficerId)
+    setIsReassigning(false)
+    if (!result.success) { setReassignError(result.error ?? "Failed to reassign."); return }
+    setReassignDialogOpen(false)
+    loadFiles()
+  }
+
+  // ── Misc helpers ──────────────────────────────────────────────────────────
   const handleStatusChange = async (fileId: string, newStatus: string) => {
     await updateFileStatus(fileId, newStatus)
     loadFiles()
   }
 
-  const handleViewDetails = (file: FileRecord) => {
-    setSelectedFile(file)
-    setDetailsSheetOpen(true)
+  const formatDate = (s: string) =>
+    new Date(s).toLocaleDateString("en-ZA", { year: "numeric", month: "short", day: "numeric" })
+
+  const getFileType = (url: string | null, filename: string | null) => {
+    const name = filename || url || ""
+    const ext  = name.split(".").pop()?.toLowerCase() || ""
+    if (ext === "pdf") return "pdf"
+    if (["doc","docx"].includes(ext)) return "word"
+    if (["jpg","jpeg","png","gif","webp"].includes(ext)) return "image"
+    return "other"
   }
 
   const handleDownload = async (url: string, filename: string) => {
     try {
-      const response = await fetch(url)
-      const blob = await response.blob()
-      const downloadUrl = window.URL.createObjectURL(blob)
-      const link = document.createElement("a")
-      link.href = downloadUrl
-      link.download = filename
-      document.body.appendChild(link)
-      link.click()
-      document.body.removeChild(link)
-      window.URL.revokeObjectURL(downloadUrl)
-    } catch (error) {
-      console.error("Download failed:", error)
-    }
+      const blob = await fetch(url).then(r => r.blob())
+      const a = Object.assign(document.createElement("a"), {
+        href: URL.createObjectURL(blob), download: filename,
+      })
+      document.body.appendChild(a); a.click()
+      document.body.removeChild(a); URL.revokeObjectURL(a.href)
+    } catch (e) { console.error("Download failed", e) }
   }
 
-  const getFileType = (url: string | null, filename: string | null): string => {
-    if (!url && !filename) return "unknown"
-    const name = filename || url || ""
-    const ext = name.split(".").pop()?.toLowerCase() || ""
-    if (ext === "pdf") return "pdf"
-    if (["doc", "docx"].includes(ext)) return "word"
-    if (["jpg", "jpeg", "png", "gif", "webp"].includes(ext)) return "image"
-    return "unknown"
-  }
-
-  const isPdfFile = (url: string | null, filename: string | null): boolean => {
-    return getFileType(url, filename) === "pdf"
-  }
-
-  const isImageFile = (url: string | null, filename: string | null): boolean => {
-    return getFileType(url, filename) === "image"
-  }
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString("en-ZA", {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-    })
-  }
-
+  // ─────────────────────────────────────────────────────────────────────────
   return (
     <div className="space-y-6">
-      {/* Header Card */}
+
+      {/* ── Header Card ── */}
       <Card className="border-border bg-card">
         <CardHeader className="pb-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -235,12 +241,8 @@ export function FilesList() {
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setShowFilters(!showFilters)}
-                className={showFilters ? "bg-primary/10" : ""}
-              >
+              <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)}
+                className={showFilters ? "bg-primary/10" : ""}>
                 <Filter className="w-4 h-4 mr-2" />
                 Filters
                 {hasActiveFilters && (
@@ -252,64 +254,46 @@ export function FilesList() {
               <Button variant="outline" size="sm" onClick={loadFiles}>
                 <RefreshCw className="w-4 h-4" />
               </Button>
-              {canCreateFiles && (
-                <Button asChild size="sm">
-                  <Link href="/register">Add File</Link>
-                </Button>
+              {canCreate && (
+                <Button asChild size="sm"><Link href="/register">Add File</Link></Button>
               )}
             </div>
           </div>
         </CardHeader>
 
         <CardContent className="space-y-4">
-          {/* Search Bar */}
+          {/* Search */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-            <Input
-              placeholder="Search by file reference, client name, or ID..."
+            <Input placeholder="Search by file reference, client name, or ID..."
               value={filters.search}
-              onChange={(e) => handleSearch(e.target.value)}
-              className="pl-9 bg-background border-input"
-            />
+              onChange={e => handleFilterChange("search", e.target.value)}
+              className="pl-9 bg-background border-input" />
           </div>
 
           {/* Filters Panel */}
           {showFilters && (
-            <div className="p-4 rounded-lg border border-border bg-muted/30 space-y-4 animate-slide-in-up">
+            <div className="p-4 rounded-lg border border-border bg-muted/30 space-y-4">
               <div className="flex items-center justify-between">
                 <span className="text-sm font-medium text-foreground">Filter Options</span>
                 {hasActiveFilters && (
                   <Button variant="ghost" size="sm" onClick={clearFilters} className="h-7 text-xs">
-                    <X className="w-3 h-3 mr-1" />
-                    Clear all
+                    <X className="w-3 h-3 mr-1" />Clear all
                   </Button>
                 )}
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <Select
-                  value={filters.category || "all"}
-                  onValueChange={(v) => handleFilterChange("category", v === "all" ? "" : v)}
-                >
-                  <SelectTrigger className="bg-background">
-                    <SelectValue placeholder="Category" />
-                  </SelectTrigger>
+                <Select value={filters.category || "all"}
+                  onValueChange={v => handleFilterChange("category", v === "all" ? "" : v)}>
+                  <SelectTrigger className="bg-background"><SelectValue placeholder="Category" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Categories</SelectItem>
-                    {categories.map((cat) => (
-                      <SelectItem key={cat.id} value={cat.id}>
-                        {cat.code} - {cat.name}
-                      </SelectItem>
-                    ))}
+                    {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.code} - {c.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
-
-                <Select
-                  value={filters.status || "all"}
-                  onValueChange={(v) => handleFilterChange("status", v === "all" ? "" : v)}
-                >
-                  <SelectTrigger className="bg-background">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
+                <Select value={filters.status || "all"}
+                  onValueChange={v => handleFilterChange("status", v === "all" ? "" : v)}>
+                  <SelectTrigger className="bg-background"><SelectValue placeholder="Status" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Statuses</SelectItem>
                     <SelectItem value="Active">Active</SelectItem>
@@ -317,39 +301,21 @@ export function FilesList() {
                     <SelectItem value="Missing">Missing</SelectItem>
                   </SelectContent>
                 </Select>
-
-                <Select
-                  value={filters.officer || "all"}
-                  onValueChange={(v) => handleFilterChange("officer", v === "all" ? "" : v)}
-                >
-                  <SelectTrigger className="bg-background">
-                    <SelectValue placeholder="Officer" />
-                  </SelectTrigger>
+                <Select value={filters.officer || "all"}
+                  onValueChange={v => handleFilterChange("officer", v === "all" ? "" : v)}>
+                  <SelectTrigger className="bg-background"><SelectValue placeholder="Officer" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">All Officers</SelectItem>
-                    {officers.map((officer) => (
-                      <SelectItem key={officer.id} value={officer.id}>
-                        {officer.name}
-                      </SelectItem>
-                    ))}
+                    {officers.map(o => <SelectItem key={o.id} value={o.id}>{o.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
-
                 <div className="flex gap-2">
-                  <Input
-                    type="date"
-                    value={filters.dateFrom}
-                    onChange={(e) => handleFilterChange("dateFrom", e.target.value)}
-                    className="bg-background"
-                    placeholder="From"
-                  />
-                  <Input
-                    type="date"
-                    value={filters.dateTo}
-                    onChange={(e) => handleFilterChange("dateTo", e.target.value)}
-                    className="bg-background"
-                    placeholder="To"
-                  />
+                  <Input type="date" value={filters.dateFrom}
+                    onChange={e => handleFilterChange("dateFrom", e.target.value)}
+                    className="bg-background" />
+                  <Input type="date" value={filters.dateTo}
+                    onChange={e => handleFilterChange("dateTo", e.target.value)}
+                    className="bg-background" />
                 </div>
               </div>
             </div>
@@ -363,7 +329,7 @@ export function FilesList() {
                   <TableHead className="font-semibold">File Reference</TableHead>
                   <TableHead className="font-semibold">Client Name</TableHead>
                   <TableHead className="font-semibold hidden md:table-cell">Category</TableHead>
-                  <TableHead className="font-semibold hidden lg:table-cell">Location</TableHead>
+                  <TableHead className="font-semibold hidden lg:table-cell">Assigned Officer</TableHead>
                   <TableHead className="font-semibold hidden sm:table-cell">Date Received</TableHead>
                   <TableHead className="font-semibold">Status</TableHead>
                   <TableHead className="font-semibold w-[50px]"></TableHead>
@@ -386,119 +352,97 @@ export function FilesList() {
                         <FolderOpen className="w-10 h-10 mb-2 opacity-50" />
                         <span>No files found</span>
                         {hasActiveFilters && (
-                          <Button variant="link" size="sm" onClick={clearFilters}>
-                            Clear filters
-                          </Button>
+                          <Button variant="link" size="sm" onClick={clearFilters}>Clear filters</Button>
                         )}
                       </div>
                     </TableCell>
                   </TableRow>
-                ) : (
-                  files.map((file) => (
-                    <TableRow key={file.id} className="hover:bg-muted/30">
-                      <TableCell className="font-medium text-foreground">
-                        {file.file_reference}
-                      </TableCell>
-                      <TableCell className="text-foreground">{file.client_name}</TableCell>
-                      <TableCell className="hidden md:table-cell">
-                        {file.category && (
-                          <Badge variant="outline" className="font-normal">
-                            {file.category.code}
-                          </Badge>
-                        )}
-                      </TableCell>
-                      <TableCell className="hidden lg:table-cell text-muted-foreground">
-                        {file.physical_location || "-"}
-                      </TableCell>
-                      <TableCell className="hidden sm:table-cell text-muted-foreground">
-                        {formatDate(file.date_received)}
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={`capitalize border ${statusColors[file.status] || ""}`}>
-                          {file.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                              <MoreHorizontal className="w-4 h-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-<DropdownMenuContent align="end">
-                                            <DropdownMenuItem onClick={() => handleViewDetails(file)}>
-                                              <Eye className="w-4 h-4 mr-2" />
-                                              View Details
-                                            </DropdownMenuItem>
-                                            {(canEditAllFiles || isSupervisor) && (
-                                              <DropdownMenuItem asChild>
-                                                <Link href={`/files/${file.id}/edit`} className="flex items-center">
-                                                  <Pencil className="w-4 h-4 mr-2" />
-                                                  Edit
-                                                </Link>
-                                              </DropdownMenuItem>
-                                            )}
-                                            {(canEditAllFiles || isSupervisor) && (
-                                              <>
-                                                <DropdownMenuSeparator />
-                                                <DropdownMenuItem
-                                                  onClick={() => handleStatusChange(file.id, "Active")}
-                                                  disabled={file.status === "Active"}
-                                                >
-                                                  Mark as Active
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem
-                                                  onClick={() => handleStatusChange(file.id, "Archived")}
-                                                  disabled={file.status === "Archived"}
-                                                >
-                                                  Mark as Archived
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem
-                                                  onClick={() => handleStatusChange(file.id, "Missing")}
-                                                  disabled={file.status === "Missing"}
-                                                >
-                                                  Mark as Missing
-                                                </DropdownMenuItem>
-                                              </>
-                                            )}
-                                            {canReassignFiles && (
-                                              <>
-                                                <DropdownMenuSeparator />
-                                                <DropdownMenuItem asChild>
-                                                  <Link href={`/files/${file.id}/reassign`} className="flex items-center">
-                                                    <UserPlus className="w-4 h-4 mr-2" />
-                                                    Reassign File
-                                                  </Link>
-                                                </DropdownMenuItem>
-                                              </>
-                                            )}
-                                            {canDeleteFiles && (
-                                              <>
-                                                <DropdownMenuSeparator />
-                                                <DropdownMenuItem
-                                                  onClick={() => handleDeleteClick(file)}
-                                                  className="text-destructive focus:text-destructive"
-                                                >
-                                                  <Trash2 className="w-4 h-4 mr-2" />
-                                                  Delete
-                                                </DropdownMenuItem>
-                                              </>
-                                            )}
-                                            {!canEditAllFiles && !isSupervisor && !canDeleteFiles && (
-                                              <>
-                                                <DropdownMenuSeparator />
-                                                <DropdownMenuItem disabled className="text-muted-foreground">
-                                                  <Lock className="w-4 h-4 mr-2" />
-                                                  Limited access
-                                                </DropdownMenuItem>
-                                              </>
-                                            )}
-                                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
+                ) : files.map(file => (
+                  <TableRow key={file.id} className="hover:bg-muted/30">
+                    <TableCell className="font-medium text-foreground">{file.file_reference}</TableCell>
+                    <TableCell className="text-foreground">{file.client_name}</TableCell>
+                    <TableCell className="hidden md:table-cell">
+                      {file.category && (
+                        <Badge variant="outline" className="font-normal">{file.category.code}</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="hidden lg:table-cell text-muted-foreground">
+                      {file.officer?.name || <span className="italic text-muted-foreground/60">Unassigned</span>}
+                    </TableCell>
+                    <TableCell className="hidden sm:table-cell text-muted-foreground">
+                      {formatDate(file.date_received)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={`capitalize border ${statusColors[file.status] || ""}`}>
+                        {file.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreHorizontal className="w-4 h-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-48">
+                          <DropdownMenuItem onClick={() => { setSelectedFile(file); setDetailsSheetOpen(true) }}>
+                            <Eye className="w-4 h-4 mr-2" />View Details
+                          </DropdownMenuItem>
+
+                          {canEditAll && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => openEditDialog(file)}>
+                                <Pencil className="w-4 h-4 mr-2" />Edit Metadata
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleStatusChange(file.id, "Active")}
+                                disabled={file.status === "Active"}>
+                                Mark as Active
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleStatusChange(file.id, "Archived")}
+                                disabled={file.status === "Archived"}>
+                                Mark as Archived
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleStatusChange(file.id, "Missing")}
+                                disabled={file.status === "Missing"}>
+                                Mark as Missing
+                              </DropdownMenuItem>
+                            </>
+                          )}
+
+                          {canReassign && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem onClick={() => openReassignDialog(file)}>
+                                <UserPlus className="w-4 h-4 mr-2" />Reassign Officer
+                              </DropdownMenuItem>
+                            </>
+                          )}
+
+                          {canDelete && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                onClick={() => { setFileToDelete(file); setDeleteDialogOpen(true) }}
+                                className="text-destructive focus:text-destructive">
+                                <Trash2 className="w-4 h-4 mr-2" />Delete
+                              </DropdownMenuItem>
+                            </>
+                          )}
+
+                          {!canEditAll && !canDelete && !canReassign && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem disabled className="text-muted-foreground">
+                                <Lock className="w-4 h-4 mr-2" />Limited access
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
               </TableBody>
             </Table>
           </div>
@@ -507,26 +451,14 @@ export function FilesList() {
           {totalPages > 1 && (
             <div className="flex items-center justify-between">
               <p className="text-sm text-muted-foreground">
-                Showing {((page - 1) * pageSize) + 1} to {Math.min(page * pageSize, totalCount)} of {totalCount} files
+                Showing {(page - 1) * pageSize + 1} to {Math.min(page * pageSize, totalCount)} of {totalCount} files
               </p>
               <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage(p => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                >
+                <Button variant="outline" size="sm" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}>
                   <ChevronLeft className="w-4 h-4" />
                 </Button>
-                <span className="text-sm text-muted-foreground px-2">
-                  Page {page} of {totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                  disabled={page === totalPages}
-                >
+                <span className="text-sm text-muted-foreground px-2">Page {page} of {totalPages}</span>
+                <Button variant="outline" size="sm" onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
                   <ChevronRight className="w-4 h-4" />
                 </Button>
               </div>
@@ -535,36 +467,197 @@ export function FilesList() {
         </CardContent>
       </Card>
 
-      {/* Delete Confirmation Dialog */}
+      {/* ══════════════════════════════════════════════════════════════════════
+          EDIT METADATA DIALOG
+      ══════════════════════════════════════════════════════════════════════ */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="w-4 h-4 text-primary" />
+              Edit File — {editFile?.file_reference}
+            </DialogTitle>
+            <DialogDescription>
+              Update the metadata for this file. All changes are saved immediately.
+            </DialogDescription>
+          </DialogHeader>
+
+          <ScrollArea className="max-h-[60vh] pr-1">
+            <div className="space-y-4 py-2 px-1">
+              <div className="space-y-1.5">
+                <Label>Client Name <span className="text-destructive">*</span></Label>
+                <Input value={editForm.client_name}
+                  onChange={e => setEditForm(p => ({ ...p, client_name: e.target.value }))}
+                  placeholder="Client / company name" />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Registration ID</Label>
+                  <Input value={editForm.registration_id}
+                    onChange={e => setEditForm(p => ({ ...p, registration_id: e.target.value }))}
+                    placeholder="Optional" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Date Received <span className="text-destructive">*</span></Label>
+                  <Input type="date" value={editForm.date_received}
+                    onChange={e => setEditForm(p => ({ ...p, date_received: e.target.value }))} />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Category</Label>
+                  <Select value={editForm.category_id || "none"}
+                    onValueChange={v => setEditForm(p => ({ ...p, category_id: v === "none" ? "" : v }))}>
+                    <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">None</SelectItem>
+                      {categories.map(c => (
+                        <SelectItem key={c.id} value={c.id}>{c.code} — {c.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Status</Label>
+                  <Select value={editForm.status}
+                    onValueChange={v => setEditForm(p => ({ ...p, status: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Active">Active</SelectItem>
+                      <SelectItem value="Archived">Archived</SelectItem>
+                      <SelectItem value="Missing">Missing</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Physical Location</Label>
+                <Input value={editForm.physical_location}
+                  onChange={e => setEditForm(p => ({ ...p, physical_location: e.target.value }))}
+                  placeholder="e.g. Shelf B-3, Room 204" />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label>Notes</Label>
+                <textarea
+                  value={editForm.notes}
+                  onChange={e => setEditForm(p => ({ ...p, notes: e.target.value }))}
+                  placeholder="Optional notes or remarks"
+                  rows={3}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring resize-none"
+                />
+              </div>
+
+              {editError && (
+                <p className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
+                  {editError}
+                </p>
+              )}
+            </div>
+          </ScrollArea>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={isSaving}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEdit} disabled={isSaving}>
+              {isSaving ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Saving...</> : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          REASSIGN OFFICER DIALOG
+      ══════════════════════════════════════════════════════════════════════ */}
+      <Dialog open={reassignDialogOpen} onOpenChange={setReassignDialogOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <UserPlus className="w-4 h-4 text-primary" />
+              Reassign Officer
+            </DialogTitle>
+            <DialogDescription>
+              Reassign <span className="font-medium text-foreground">{reassignFile?.file_reference}</span> to a different officer.
+              The officer will be notified.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {reassignFile?.officer && (
+              <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50 text-sm">
+                <span className="text-muted-foreground">Currently assigned to</span>
+                <span className="font-medium text-foreground">{reassignFile.officer.name}</span>
+              </div>
+            )}
+
+            <div className="space-y-1.5">
+              <Label>New Officer <span className="text-destructive">*</span></Label>
+              <Select value={newOfficerId || "none"}
+                onValueChange={v => setNewOfficerId(v === "none" ? "" : v)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select officer..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">— Unassign —</SelectItem>
+                  {officers.map(o => (
+                    <SelectItem key={o.id} value={o.id}
+                      disabled={o.id === reassignFile?.officer?.id}>
+                      {o.name}
+                      {o.id === reassignFile?.officer?.id ? " (current)" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {reassignError && (
+              <p className="text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-lg px-3 py-2">
+                {reassignError}
+              </p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReassignDialogOpen(false)} disabled={isReassigning}>
+              Cancel
+            </Button>
+            <Button onClick={handleConfirmReassign} disabled={isReassigning || newOfficerId === reassignFile?.officer?.id}>
+              {isReassigning
+                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Reassigning...</>
+                : "Confirm Reassign"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          DELETE CONFIRMATION
+      ══════════════════════════════════════════════════════════════════════ */}
       <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete File</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete the file &quot;{fileToDelete?.file_reference}&quot;? This action cannot be undone.
+              Are you sure you want to delete &quot;{fileToDelete?.file_reference}&quot;? This cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={handleConfirmDelete}
-              disabled={isDeleting}
-              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-            >
-              {isDeleting ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Deleting...
-                </>
-              ) : (
-                "Delete"
-              )}
+            <AlertDialogAction onClick={handleConfirmDelete} disabled={isDeleting}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              {isDeleting ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Deleting...</> : "Delete"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* File Details Sheet with Document Viewer */}
+      {/* ══════════════════════════════════════════════════════════════════════
+          VIEW DETAILS SHEET
+      ══════════════════════════════════════════════════════════════════════ */}
       <Sheet open={detailsSheetOpen} onOpenChange={setDetailsSheetOpen}>
         <SheetContent side="right" className="w-full sm:max-w-2xl lg:max-w-4xl p-0 flex flex-col">
           <SheetHeader className="p-6 pb-4 border-b border-border">
@@ -581,179 +674,114 @@ export function FilesList() {
                 )}
               </div>
             </SheetTitle>
-            <SheetDescription>
-              {selectedFile?.client_name}
-            </SheetDescription>
+            <SheetDescription>{selectedFile?.client_name}</SheetDescription>
           </SheetHeader>
-          
+
           <ScrollArea className="flex-1">
             <div className="p-6 space-y-6">
-              {/* File Details */}
               <div className="space-y-4">
                 <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">File Information</h3>
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Category</p>
-                    <p className="text-sm text-foreground">
-                      {selectedFile?.category ? `${selectedFile.category.code} - ${selectedFile.category.name}` : "-"}
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Registration ID</p>
-                    <p className="text-sm text-foreground">{selectedFile?.registration_id || "-"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Date Received</p>
-                    <p className="text-sm text-foreground">
-                      {selectedFile?.date_received ? formatDate(selectedFile.date_received) : "-"}
-                    </p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Physical Location</p>
-                    <p className="text-sm text-foreground">{selectedFile?.physical_location || "-"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Assigned Officer</p>
-                    <p className="text-sm text-foreground">{selectedFile?.officer?.name || "-"}</p>
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground">Created</p>
-                    <p className="text-sm text-foreground">
-                      {selectedFile?.created_at ? formatDate(selectedFile.created_at) : "-"}
-                    </p>
-                  </div>
+                  {[
+                    ["Category",          selectedFile?.category ? `${selectedFile.category.code} - ${selectedFile.category.name}` : "—"],
+                    ["Registration ID",   selectedFile?.registration_id || "—"],
+                    ["Date Received",     selectedFile?.date_received ? formatDate(selectedFile.date_received) : "—"],
+                    ["Physical Location", selectedFile?.physical_location || "—"],
+                    ["Assigned Officer",  selectedFile?.officer?.name || "Unassigned"],
+                    ["Created",           selectedFile?.created_at ? formatDate(selectedFile.created_at) : "—"],
+                  ].map(([label, value]) => (
+                    <div key={label} className="space-y-1">
+                      <p className="text-xs text-muted-foreground">{label}</p>
+                      <p className="text-sm text-foreground">{value}</p>
+                    </div>
+                  ))}
                 </div>
               </div>
 
               <Separator />
 
-              {/* Document Preview Section */}
+              {/* Document preview */}
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Document Preview</h3>
+                  <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">Document</h3>
                   {selectedFile?.document_url && selectedFile?.document_name && (
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleDownload(selectedFile.document_url!, selectedFile.document_name!)}
-                      >
-                        <Download className="w-4 h-4 mr-2" />
-                        Download
+                    <div className="flex gap-2">
+                      <Button variant="outline" size="sm"
+                        onClick={() => handleDownload(selectedFile.document_url!, selectedFile.document_name!)}>
+                        <Download className="w-4 h-4 mr-2" />Download
                       </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => window.open(selectedFile.document_url!, "_blank")}
-                      >
-                        <ExternalLink className="w-4 h-4 mr-2" />
-                        Open
+                      <Button variant="outline" size="sm"
+                        onClick={() => window.open(selectedFile.document_url!, "_blank")}>
+                        <ExternalLink className="w-4 h-4 mr-2" />Open
                       </Button>
                     </div>
                   )}
                 </div>
-                
+
                 {selectedFile?.document_url ? (
                   <div className="rounded-lg border border-border bg-muted/30 overflow-hidden">
-                    {/* PDF Viewer */}
-                    {isPdfFile(selectedFile.document_url, selectedFile.document_name) && (
+                    {getFileType(selectedFile.document_url, selectedFile.document_name) === "pdf" && (
                       <div className="aspect-[3/4] w-full">
-                        <iframe
-                          src={`${selectedFile.document_url}#toolbar=0&navpanes=0`}
+                        <iframe src={`${selectedFile.document_url}#toolbar=0&navpanes=0`}
                           className="w-full h-full border-0"
-                          title={selectedFile.document_name || "Document Preview"}
-                        />
+                          title={selectedFile.document_name || "Document"} />
                       </div>
                     )}
-                    
-                    {/* Image Viewer */}
-                    {isImageFile(selectedFile.document_url, selectedFile.document_name) && (
+                    {getFileType(selectedFile.document_url, selectedFile.document_name) === "image" && (
                       <div className="p-4 flex items-center justify-center">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={selectedFile.document_url}
-                          alt={selectedFile.document_name || "Document Preview"}
-                          className="max-w-full max-h-[500px] object-contain rounded-lg"
-                        />
+                        <img src={selectedFile.document_url}
+                          alt={selectedFile.document_name || "Document"}
+                          className="max-w-full max-h-[500px] object-contain rounded-lg" />
                       </div>
                     )}
-                    
-                    {/* Word/Other Document - Show download prompt */}
-                    {!isPdfFile(selectedFile.document_url, selectedFile.document_name) && 
-                     !isImageFile(selectedFile.document_url, selectedFile.document_name) && (
+                    {!["pdf","image"].includes(getFileType(selectedFile.document_url, selectedFile.document_name)) && (
                       <div className="p-8 text-center">
-                        <div className="w-16 h-16 mx-auto rounded-lg bg-primary/10 flex items-center justify-center mb-4">
-                          <FileIcon className="w-8 h-8 text-primary" />
-                        </div>
-                        <h4 className="text-lg font-medium text-foreground mb-2">
-                          {selectedFile.document_name}
-                        </h4>
-                        <p className="text-sm text-muted-foreground mb-4">
-                          This document type cannot be previewed directly. Please download to view.
-                        </p>
-                        <div className="flex items-center justify-center gap-2">
-                          <Button
-                            onClick={() => handleDownload(selectedFile.document_url!, selectedFile.document_name!)}
-                          >
-                            <Download className="w-4 h-4 mr-2" />
-                            Download Document
-                          </Button>
-                          <Button
-                            variant="outline"
-                            onClick={() => window.open(selectedFile.document_url!, "_blank")}
-                          >
-                            <ExternalLink className="w-4 h-4 mr-2" />
-                            Open in New Tab
-                          </Button>
-                        </div>
+                        <FileIcon className="w-10 h-10 mx-auto text-primary mb-3" />
+                        <p className="text-sm font-medium mb-1">{selectedFile.document_name}</p>
+                        <p className="text-xs text-muted-foreground">Preview not available — download to view.</p>
                       </div>
                     )}
-
-                    {/* Document Info Footer */}
-                    <div className="px-4 py-3 bg-muted/50 border-t border-border flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <FileText className="w-4 h-4 text-muted-foreground" />
-                        <span className="text-sm text-muted-foreground truncate max-w-[300px]">
-                          {selectedFile.document_name}
-                        </span>
-                      </div>
+                    <div className="px-4 py-3 bg-muted/50 border-t border-border flex items-center gap-2">
+                      <FileText className="w-4 h-4 text-muted-foreground" />
+                      <span className="text-sm text-muted-foreground truncate">{selectedFile.document_name}</span>
                     </div>
                   </div>
                 ) : (
                   <div className="rounded-lg border border-dashed border-border bg-muted/20 p-8 text-center">
-                    <div className="w-16 h-16 mx-auto rounded-lg bg-muted flex items-center justify-center mb-4">
-                      <FileIcon className="w-8 h-8 text-muted-foreground" />
-                    </div>
-                    <h4 className="text-lg font-medium text-foreground mb-2">No Document Attached</h4>
-                    <p className="text-sm text-muted-foreground">
-                      This file does not have any documents attached. You can add a document by editing the file.
-                    </p>
-                    <Button variant="outline" className="mt-4" asChild>
-                      <Link href={`/files/${selectedFile?.id}/edit`}>
-                        <Pencil className="w-4 h-4 mr-2" />
-                        Edit File
-                      </Link>
-                    </Button>
+                    <FileIcon className="w-10 h-10 mx-auto text-muted-foreground/50 mb-3" />
+                    <p className="text-sm font-medium mb-1">No document attached</p>
+                    <p className="text-xs text-muted-foreground">Use Edit Metadata to attach a document.</p>
                   </div>
                 )}
               </div>
             </div>
           </ScrollArea>
-          
-          {/* Footer Actions */}
+
           <div className="p-4 border-t border-border flex items-center justify-between bg-background">
-            <Button variant="outline" asChild>
-              <Link href={`/files/${selectedFile?.id}/edit`}>
-                <Pencil className="w-4 h-4 mr-2" />
-                Edit File
-              </Link>
-            </Button>
-            <Button variant="ghost" onClick={() => setDetailsSheetOpen(false)}>
-              Close
-            </Button>
+            <div className="flex gap-2">
+              {canEditAll && (
+                <Button variant="outline" onClick={() => {
+                  setDetailsSheetOpen(false)
+                  if (selectedFile) openEditDialog(selectedFile)
+                }}>
+                  <Pencil className="w-4 h-4 mr-2" />Edit Metadata
+                </Button>
+              )}
+              {canReassign && (
+                <Button variant="outline" onClick={() => {
+                  setDetailsSheetOpen(false)
+                  if (selectedFile) openReassignDialog(selectedFile)
+                }}>
+                  <UserPlus className="w-4 h-4 mr-2" />Reassign
+                </Button>
+              )}
+            </div>
+            <Button variant="ghost" onClick={() => setDetailsSheetOpen(false)}>Close</Button>
           </div>
         </SheetContent>
       </Sheet>
+
     </div>
   )
 }

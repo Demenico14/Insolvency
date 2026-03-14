@@ -112,7 +112,7 @@ export async function getFiles(
   }
 
   return {
-    files: (data || []) as FileRecord[],
+    files: (data || []) as unknown as FileRecord[],
     totalCount: count || 0,
     page,
     pageSize,
@@ -147,7 +147,7 @@ export async function getFileById(id: string): Promise<FileRecord | null> {
     return null
   }
 
-  return data as FileRecord
+  return data as unknown as FileRecord
 }
 
 export async function deleteFile(id: string): Promise<{ success: boolean; error?: string }> {
@@ -179,6 +179,66 @@ export async function updateFileStatus(
 
   if (error) {
     console.error("Error updating file status:", error)
+    return { success: false, error: error.message }
+  }
+
+  return { success: true }
+}
+
+export interface FileMetadataUpdate {
+  client_name: string
+  registration_id: string
+  date_received: string
+  physical_location: string
+  status: string
+  category_id: string
+  notes: string
+}
+
+export async function updateFileMetadata(
+  id: string,
+  data: FileMetadataUpdate
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+
+  const { error } = await supabase
+    .from("files")
+    .update({
+      client_name: data.client_name,
+      registration_id: data.registration_id || null,
+      date_received: data.date_received,
+      physical_location: data.physical_location || null,
+      status: data.status,
+      category_id: data.category_id || null,
+      notes: data.notes || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+
+  if (error) {
+    console.error("Error updating file metadata:", error)
+    return { success: false, error: error.message }
+  }
+
+  return { success: true }
+}
+
+export async function reassignFileOfficer(
+  fileId: string,
+  officerId: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+
+  const { error } = await supabase
+    .from("files")
+    .update({
+      assigned_officer_id: officerId || null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", fileId)
+
+  if (error) {
+    console.error("Error reassigning file officer:", error)
     return { success: false, error: error.message }
   }
 
