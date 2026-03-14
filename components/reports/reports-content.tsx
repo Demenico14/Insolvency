@@ -6,84 +6,262 @@ import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { 
-  FileText, 
-  FolderOpen, 
-  Archive, 
-  AlertTriangle, 
+import {
+  FileText,
+  FolderOpen,
+  Archive,
+  AlertTriangle,
   ArrowRightLeft,
   Download,
   RefreshCw,
   Users,
-  TrendingUp
+  TrendingUp,
+  FileSpreadsheet,
+  Lock,
 } from "lucide-react"
-import { getReportData, exportReportCSV, type ReportPeriod, type ReportData } from "@/app/reports/actions"
+import { getReportData, type ReportPeriod, type ReportData } from "@/app/reports/actions"
 import { useUserWithRole } from "@/lib/rbac/use-user-role"
-import { Lock } from "lucide-react"
 import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell,
-  LineChart,
-  Line,
-  Legend
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, LineChart, Line, Legend,
 } from "recharts"
 
 const COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#8b5cf6", "#ec4899", "#06b6d4", "#84cc16"]
 
 const statusColors: Record<string, string> = {
-  "Active": "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400",
+  "Active":   "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400",
   "Archived": "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-400",
-  "Missing": "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+  "Missing":  "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400",
+}
+
+const PERIOD_LABEL: Record<ReportPeriod, string> = {
+  week: "Last Week", month: "Last Month", quarter: "Last Quarter",
+  year: "Last Year", all: "All Time",
 }
 
 export function ReportsContent() {
-  const [period, setPeriod] = useState<ReportPeriod>("all")
-  const [data, setData] = useState<ReportData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [exporting, setExporting] = useState(false)
+  const [period,    setPeriod]    = useState<ReportPeriod>("all")
+  const [data,      setData]      = useState<ReportData | null>(null)
+  const [loading,   setLoading]   = useState(true)
+  const [exportingPdf,   setExportingPdf]   = useState(false)
+  const [exportingExcel, setExportingExcel] = useState(false)
 
-  // RBAC permissions
   const { isSupervisor, permissions } = useUserWithRole()
-  const canViewAllReports = permissions.includes('reports:read_all')
-  const canExportReports = permissions.includes('reports:export')
-  const hasRestrictedAccess = !canViewAllReports && !isSupervisor
+  const canViewAll    = permissions.includes('reports:read_all') || isSupervisor
+  const canExport     = permissions.includes('reports:export')   || isSupervisor
+  const hasRestricted = !canViewAll
 
   const loadData = useCallback(async () => {
     setLoading(true)
     const result = await getReportData(period)
-    if (result.data) {
-      setData(result.data)
-    }
+    if (result.data) setData(result.data)
     setLoading(false)
   }, [period])
 
-  useEffect(() => {
-    loadData()
-  }, [loadData])
+  useEffect(() => { loadData() }, [loadData])
 
-  const handleExport = async () => {
-    setExporting(true)
-    const result = await exportReportCSV(period)
-    if (result.data) {
-      const blob = new Blob([result.data], { type: "text/csv" })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `insolvency-report-${period}-${new Date().toISOString().split("T")[0]}.csv`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+  // ── PDF Export ─────────────────────────────────────────────────────────────
+  const handleExportPdf = async () => {
+    if (!data) return
+    setExportingPdf(true)
+    try {
+      const { default: jsPDF } = await import('jspdf')
+      const { default: autoTable } = await import('jspdf-autotable')
+
+      const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' })
+      const pageW = doc.internal.pageSize.getWidth()
+      const dateStr = new Date().toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' })
+
+      // ── Header ──
+      doc.setFillColor(12, 20, 38)
+      doc.rect(0, 0, pageW, 28, 'F')
+      doc.setTextColor(240, 237, 230)
+      doc.setFontSize(14)
+      doc.setFont('helvetica', 'bold')
+      doc.text('OFFICE OF THE MASTER OF HIGH COURT', pageW / 2, 11, { align: 'center' })
+      doc.setFontSize(10)
+      doc.setFont('helvetica', 'normal')
+      doc.text('Insolvency File & Records Management System', pageW / 2, 18, { align: 'center' })
+      doc.setFontSize(8)
+      doc.text(`Report Period: ${PERIOD_LABEL[period]}   |   Generated: ${dateStr}`, pageW / 2, 24, { align: 'center' })
+
+      doc.setTextColor(30, 30, 30)
+      let y = 36
+
+      // ── Summary ──
+      doc.setFontSize(11)
+      doc.setFont('helvetica', 'bold')
+      doc.text('SUMMARY', 14, y); y += 6
+
+      autoTable(doc, {
+        startY: y,
+        head: [['Metric', 'Count']],
+        body: [
+          ['Total Files',           String(data.summary.totalFiles)],
+          ['Active Files',          String(data.summary.activeFiles)],
+          ['Archived Files',        String(data.summary.archivedFiles)],
+          ['Missing Files',         String(data.summary.missingFiles)],
+          ['Total Movements',       String(data.summary.totalMovements)],
+          ['Currently Checked Out', String(data.summary.checkedOutFiles)],
+        ],
+        theme: 'grid',
+        headStyles: { fillColor: [12, 20, 38], textColor: [240, 237, 230], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+        margin: { left: 14, right: 14 },
+      })
+      y = (doc as any).lastAutoTable.finalY + 10
+
+      // ── Files by Category ──
+      doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+      doc.text('FILES BY CATEGORY', 14, y); y += 6
+
+      autoTable(doc, {
+        startY: y,
+        head: [['Category', 'Code', 'Count']],
+        body: data.filesByCategory.map(c => [c.category, c.code, String(c.count)]),
+        theme: 'grid',
+        headStyles: { fillColor: [12, 20, 38], textColor: [240, 237, 230], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+        margin: { left: 14, right: 14 },
+      })
+      y = (doc as any).lastAutoTable.finalY + 10
+
+      // ── Files by Officer ──
+      doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+      doc.text('FILES BY ASSIGNED OFFICER', 14, y); y += 6
+
+      autoTable(doc, {
+        startY: y,
+        head: [['Officer', 'Department', 'Files Assigned']],
+        body: data.filesByOfficer.map(o => [o.officer, o.department, String(o.count)]),
+        theme: 'grid',
+        headStyles: { fillColor: [12, 20, 38], textColor: [240, 237, 230], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+        margin: { left: 14, right: 14 },
+      })
+      y = (doc as any).lastAutoTable.finalY + 10
+
+      // ── Recent Files ── (new page if needed)
+      if (y > 220) { doc.addPage(); y = 20 }
+      doc.setFontSize(11); doc.setFont('helvetica', 'bold')
+      doc.text('RECENTLY REGISTERED FILES', 14, y); y += 6
+
+      autoTable(doc, {
+        startY: y,
+        head: [['File Reference', 'Client Name', 'Category', 'Date Received', 'Status']],
+        body: data.recentFiles.map(f => [
+          f.file_reference, f.client_name, f.category,
+          new Date(f.date_received).toLocaleDateString('en-ZA'), f.status,
+        ]),
+        theme: 'grid',
+        headStyles: { fillColor: [12, 20, 38], textColor: [240, 237, 230], fontStyle: 'bold' },
+        alternateRowStyles: { fillColor: [245, 247, 250] },
+        margin: { left: 14, right: 14 },
+      })
+
+      // ── Footer on every page ──
+      const pageCount = (doc.internal as any).getNumberOfPages()
+      for (let i = 1; i <= pageCount; i++) {
+        doc.setPage(i)
+        doc.setFontSize(7)
+        doc.setTextColor(150)
+        doc.text(
+          `Insolvency File & Records Management System  |  Page ${i} of ${pageCount}  |  CONFIDENTIAL`,
+          pageW / 2,
+          doc.internal.pageSize.getHeight() - 8,
+          { align: 'center' }
+        )
+      }
+
+      doc.save(`insolvency-report-${period}-${new Date().toISOString().split('T')[0]}.pdf`)
+    } catch (err) {
+      console.error('PDF export failed:', err)
     }
-    setExporting(false)
+    setExportingPdf(false)
+  }
+
+  // ── Excel Export ───────────────────────────────────────────────────────────
+  const handleExportExcel = async () => {
+    if (!data) return
+    setExportingExcel(true)
+    try {
+      const XLSX = await import('xlsx')
+
+      const wb = XLSX.utils.book_new()
+
+      // Summary sheet
+      const summaryRows = [
+        ['INSOLVENCY FILE & RECORDS MANAGEMENT SYSTEM'],
+        [`Report Period: ${PERIOD_LABEL[period]}`],
+        [`Generated: ${new Date().toLocaleDateString('en-ZA')}`],
+        [],
+        ['SUMMARY'],
+        ['Metric', 'Count'],
+        ['Total Files',           data.summary.totalFiles],
+        ['Active Files',          data.summary.activeFiles],
+        ['Archived Files',        data.summary.archivedFiles],
+        ['Missing Files',         data.summary.missingFiles],
+        ['Total Movements',       data.summary.totalMovements],
+        ['Currently Checked Out', data.summary.checkedOutFiles],
+      ]
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(summaryRows), 'Summary')
+
+      // Files by Category
+      const catRows = [
+        ['FILES BY CATEGORY'],
+        ['Category', 'Code', 'Count'],
+        ...data.filesByCategory.map(c => [c.category, c.code, c.count]),
+      ]
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(catRows), 'By Category')
+
+      // Files by Status
+      const statusRows = [
+        ['FILES BY STATUS'],
+        ['Status', 'Count'],
+        ...data.filesByStatus.map(s => [s.status, s.count]),
+      ]
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(statusRows), 'By Status')
+
+      // Files by Officer
+      const officerRows = [
+        ['FILES BY ASSIGNED OFFICER'],
+        ['Officer', 'Department', 'Files Assigned'],
+        ...data.filesByOfficer.map(o => [o.officer, o.department, o.count]),
+      ]
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(officerRows), 'By Officer')
+
+      // Movement Activity
+      const movRows = [
+        ['MOVEMENT ACTIVITY'],
+        ['Action', 'Count'],
+        ...data.movementsByAction.map(m => [m.action, m.count]),
+      ]
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(movRows), 'Movements')
+
+      // Monthly Trends
+      const trendRows = [
+        ['MONTHLY TRENDS (LAST 6 MONTHS)'],
+        ['Month', 'Files Registered', 'Movements'],
+        ...data.monthlyTrends.map(t => [t.month, t.registered, t.movements]),
+      ]
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(trendRows), 'Monthly Trends')
+
+      // Recent Files
+      const recentRows = [
+        ['RECENTLY REGISTERED FILES'],
+        ['File Reference', 'Client Name', 'Category', 'Date Received', 'Status'],
+        ...data.recentFiles.map(f => [
+          f.file_reference, f.client_name, f.category,
+          new Date(f.date_received).toLocaleDateString('en-ZA'), f.status,
+        ]),
+      ]
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(recentRows), 'Recent Files')
+
+      XLSX.writeFile(wb, `insolvency-report-${period}-${new Date().toISOString().split('T')[0]}.xlsx`)
+    } catch (err) {
+      console.error('Excel export failed:', err)
+    }
+    setExportingExcel(false)
   }
 
   return (
@@ -110,13 +288,18 @@ export function ReportsContent() {
           <Button variant="outline" size="icon" onClick={loadData} disabled={loading}>
             <RefreshCw className={`w-4 h-4 ${loading ? "animate-spin" : ""}`} />
           </Button>
-          {canExportReports && (
-            <Button onClick={handleExport} disabled={exporting || !data}>
-              <Download className="w-4 h-4 mr-2" />
-              {exporting ? "Exporting..." : "Export CSV"}
-            </Button>
-          )}
-          {!canExportReports && (
+          {canExport ? (
+            <div className="flex items-center gap-2">
+              <Button onClick={handleExportPdf} disabled={exportingPdf || !data} variant="outline">
+                <FileText className="w-4 h-4 mr-2" />
+                {exportingPdf ? "Generating..." : "Export PDF"}
+              </Button>
+              <Button onClick={handleExportExcel} disabled={exportingExcel || !data}>
+                <FileSpreadsheet className="w-4 h-4 mr-2" />
+                {exportingExcel ? "Generating..." : "Export Excel"}
+              </Button>
+            </div>
+          ) : (
             <Button variant="outline" disabled className="cursor-not-allowed">
               <Lock className="w-4 h-4 mr-2" />
               Export (Supervisor Only)
@@ -126,7 +309,7 @@ export function ReportsContent() {
       </div>
 
       {/* Restricted Access Banner for General Users */}
-      {hasRestrictedAccess && (
+      {hasRestricted && (
         <Card className="border-amber-500/30 bg-amber-500/5">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">

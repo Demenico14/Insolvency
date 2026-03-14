@@ -32,6 +32,7 @@ import {
 } from "lucide-react"
 import {
   getFiles, deleteFile, updateFileStatus, updateFileMetadata, reassignFileOfficer,
+  removeFileDocument,
   type FileRecord, type FilesFilter, type FileMetadataUpdate,
 } from "@/app/files/actions"
 import { getCategories, getOfficers } from "@/app/register/actions"
@@ -723,6 +724,20 @@ export function FilesList() {
                         onClick={() => window.open(selectedFile.document_url!, "_blank")}>
                         <ExternalLink className="w-4 h-4 mr-2" />Open
                       </Button>
+                      {canEditAll && (
+                        <Button variant="outline" size="sm"
+                          className="text-destructive hover:text-destructive border-destructive/30 hover:bg-destructive/10"
+                          onClick={async () => {
+                            if (!confirm(`Remove document "${selectedFile.document_name}" from this file? This cannot be undone.`)) return
+                            const result = await removeFileDocument(selectedFile.id)
+                            if (result.success) {
+                              setSelectedFile(prev => prev ? { ...prev, document_url: null, document_name: null } : prev)
+                              loadFiles()
+                            }
+                          }}>
+                          <Trash2 className="w-4 h-4 mr-1" />Remove
+                        </Button>
+                      )}
                     </div>
                   )}
                 </div>

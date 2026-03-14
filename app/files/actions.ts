@@ -70,7 +70,7 @@ export async function getFiles(
   }
 
   return {
-    files: (data || []) as unknown as FileRecord[],
+    files: (data || []) as FileRecord[],
     totalCount: count || 0,
     page,
     pageSize,
@@ -92,15 +92,30 @@ export async function getFileById(id: string): Promise<FileRecord | null> {
     .single()
 
   if (error) return null
-  return data as unknown as FileRecord
+  return data as FileRecord
 }
 
 export async function deleteFile(id: string): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient()
 
-  // Fetch label before deleting
+  // Fetch label + document path before deleting
   const { data: file } = await supabase
-    .from('files').select('file_reference, client_name').eq('id', id).single()
+    .from('files').select('file_reference, client_name, document_url').eq('id', id).single()
+
+  // Remove document from storage bucket if one exists
+  if (file?.document_url) {
+    try {
+      // Extract the storage path from the public URL
+      // URL format: .../storage/v1/object/public/insolvency-files/documents/xxx
+      const url = new URL(file.document_url)
+      const pathParts = url.pathname.split('/insolvency-files/')
+      if (pathParts[1]) {
+        await supabase.storage.from('insolvency-files').remove([pathParts[1]])
+      }
+    } catch (e) {
+      console.error('Storage cleanup error (non-fatal):', e)
+    }
+  }
 
   const { error } = await supabase.from('files').delete().eq('id', id)
   if (error) return { success: false, error: error.message }
@@ -227,6 +242,53 @@ export async function reassignFileOfficer(
     entity_label: file?.file_reference,
     old_value:    oldName,
     new_value:    newName,
+  })
+
+  return { success: true }
+}
+
+export async function removeFileDocument(
+  fileId: string
+): Promise<{ success: boolean; error?: string }> {
+  const supabase = await createClient()
+
+  const { data: file } = await supabase
+    .from('files')
+    .select('file_reference, document_url, document_name')
+    .eq('id', fileId)
+    .single()
+
+  if (!file) return { success: false, error: 'File not found' }
+
+  // Remove from storage bucket
+  if (file.document_url) {
+    try {
+      const url = new URL(file.document_url)
+      const pathParts = url.pathname.split('/insolvency-files/')
+      if (pathParts[1]) {
+        await supabase.storage.from('insolvency-files').remove([pathParts[1]])
+      }
+    } catch (e) {
+      console.error('Storage cleanup error (non-fatal):', e)
+    }
+  }
+
+  // Clear document fields on the file record
+  const { error } = await supabase
+    .from('files')
+    .update({ document_url: null, document_name: null, updated_at: new Date().toISOString() })
+    .eq('id', fileId)
+
+  if (error) return { success: false, error: error.message }
+
+  await logAction({
+    action:       'file.metadata_updated',
+    entity_type:  'file',
+    entity_id:    fileId,
+    entity_label: file.file_reference,
+    old_value:    file.document_name ?? 'document',
+    new_value:    'removed',
+    metadata:     { action: 'document_removed' },
   })
 
   return { success: true }
