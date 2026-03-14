@@ -44,6 +44,7 @@ const statusColors: Record<string, string> = {
   Active:   "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
   Archived: "bg-amber-500/10 text-amber-500 border-amber-500/20",
   Missing:  "bg-red-500/10 text-red-500 border-red-500/20",
+  Complete: "bg-blue-500/10 text-blue-500 border-blue-500/20",
 }
 
 interface Category { id: string; code: string; name: string }
@@ -299,6 +300,7 @@ export function FilesList() {
                     <SelectItem value="Active">Active</SelectItem>
                     <SelectItem value="Archived">Archived</SelectItem>
                     <SelectItem value="Missing">Missing</SelectItem>
+                    <SelectItem value="Complete">Complete</SelectItem>
                   </SelectContent>
                 </Select>
                 <Select value={filters.officer || "all"}
@@ -406,6 +408,12 @@ export function FilesList() {
                               <DropdownMenuItem onClick={() => handleStatusChange(file.id, "Missing")}
                                 disabled={file.status === "Missing"}>
                                 Mark as Missing
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleStatusChange(file.id, "Complete")}
+                                disabled={file.status === "Complete"}
+                                className="text-blue-500 focus:text-blue-500">
+                                <span className="w-2 h-2 rounded-full bg-blue-500 mr-2 inline-block" />
+                                Mark as Complete
                               </DropdownMenuItem>
                             </>
                           )}
@@ -528,6 +536,7 @@ export function FilesList() {
                       <SelectItem value="Active">Active</SelectItem>
                       <SelectItem value="Archived">Archived</SelectItem>
                       <SelectItem value="Missing">Missing</SelectItem>
+                      <SelectItem value="Complete">Complete</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
