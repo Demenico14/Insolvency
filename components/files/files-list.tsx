@@ -33,10 +33,11 @@ import {
 } from "@/components/ui/sheet"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
-import { FolderOpen, Search, Filter, MoreHorizontal, Eye, Pencil, Trash2, ChevronLeft, ChevronRight, Loader2, X, RefreshCw, Download, FileText, FileIcon, ExternalLink } from "lucide-react"
+import { FolderOpen, Search, Filter, MoreHorizontal, Eye, Pencil, Trash2, ChevronLeft, ChevronRight, Loader2, X, RefreshCw, Download, FileText, FileIcon, ExternalLink, UserPlus, Lock } from "lucide-react"
 import { getFiles, deleteFile, updateFileStatus, type FileRecord, type FilesFilter } from "@/app/files/actions"
 import { getCategories, getOfficers } from "@/app/register/actions"
 import Link from "next/link"
+import { useUserWithRole } from "@/lib/rbac/use-user-role"
 
 const statusColors: Record<string, string> = {
   Active: "bg-emerald-500/10 text-emerald-500 border-emerald-500/20",
@@ -69,6 +70,16 @@ export function FilesList() {
   const [isDeleting, setIsDeleting] = useState(false)
   const [detailsSheetOpen, setDetailsSheetOpen] = useState(false)
   const [selectedFile, setSelectedFile] = useState<FileRecord | null>(null)
+
+  // RBAC permissions
+  const { user, isSupervisor, permissions } = useUserWithRole()
+  
+  // Permission checks
+  const canViewAllFiles = permissions.includes('files:read_all')
+  const canEditAllFiles = permissions.includes('files:update_all')
+  const canDeleteFiles = permissions.includes('files:delete')
+  const canReassignFiles = permissions.includes('files:reassign')
+  const canCreateFiles = permissions.includes('files:create')
 
   const [filters, setFilters] = useState<FilesFilter>({
     search: "",
@@ -241,9 +252,11 @@ export function FilesList() {
               <Button variant="outline" size="sm" onClick={loadFiles}>
                 <RefreshCw className="w-4 h-4" />
               </Button>
-              <Button asChild size="sm">
-                <Link href="/register">Add File</Link>
-              </Button>
+              {canCreateFiles && (
+                <Button asChild size="sm">
+                  <Link href="/register">Add File</Link>
+                </Button>
+              )}
             </div>
           </div>
         </CardHeader>
@@ -412,45 +425,75 @@ export function FilesList() {
                               <MoreHorizontal className="w-4 h-4" />
                             </Button>
                           </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => handleViewDetails(file)}>
-                              <Eye className="w-4 h-4 mr-2" />
-                              View Details
-                            </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
-                              <Link href={`/files/${file.id}/edit`} className="flex items-center">
-                                <Pencil className="w-4 h-4 mr-2" />
-                                Edit
-                              </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => handleStatusChange(file.id, "Active")}
-                              disabled={file.status === "Active"}
-                            >
-                              Mark as Active
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleStatusChange(file.id, "Archived")}
-                              disabled={file.status === "Archived"}
-                            >
-                              Mark as Archived
-                            </DropdownMenuItem>
-                            <DropdownMenuItem
-                              onClick={() => handleStatusChange(file.id, "Missing")}
-                              disabled={file.status === "Missing"}
-                            >
-                              Mark as Missing
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              onClick={() => handleDeleteClick(file)}
-                              className="text-destructive focus:text-destructive"
-                            >
-                              <Trash2 className="w-4 h-4 mr-2" />
-                              Delete
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
+<DropdownMenuContent align="end">
+                                            <DropdownMenuItem onClick={() => handleViewDetails(file)}>
+                                              <Eye className="w-4 h-4 mr-2" />
+                                              View Details
+                                            </DropdownMenuItem>
+                                            {(canEditAllFiles || isSupervisor) && (
+                                              <DropdownMenuItem asChild>
+                                                <Link href={`/files/${file.id}/edit`} className="flex items-center">
+                                                  <Pencil className="w-4 h-4 mr-2" />
+                                                  Edit
+                                                </Link>
+                                              </DropdownMenuItem>
+                                            )}
+                                            {(canEditAllFiles || isSupervisor) && (
+                                              <>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem
+                                                  onClick={() => handleStatusChange(file.id, "Active")}
+                                                  disabled={file.status === "Active"}
+                                                >
+                                                  Mark as Active
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                  onClick={() => handleStatusChange(file.id, "Archived")}
+                                                  disabled={file.status === "Archived"}
+                                                >
+                                                  Mark as Archived
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                  onClick={() => handleStatusChange(file.id, "Missing")}
+                                                  disabled={file.status === "Missing"}
+                                                >
+                                                  Mark as Missing
+                                                </DropdownMenuItem>
+                                              </>
+                                            )}
+                                            {canReassignFiles && (
+                                              <>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem asChild>
+                                                  <Link href={`/files/${file.id}/reassign`} className="flex items-center">
+                                                    <UserPlus className="w-4 h-4 mr-2" />
+                                                    Reassign File
+                                                  </Link>
+                                                </DropdownMenuItem>
+                                              </>
+                                            )}
+                                            {canDeleteFiles && (
+                                              <>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem
+                                                  onClick={() => handleDeleteClick(file)}
+                                                  className="text-destructive focus:text-destructive"
+                                                >
+                                                  <Trash2 className="w-4 h-4 mr-2" />
+                                                  Delete
+                                                </DropdownMenuItem>
+                                              </>
+                                            )}
+                                            {!canEditAllFiles && !isSupervisor && !canDeleteFiles && (
+                                              <>
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem disabled className="text-muted-foreground">
+                                                  <Lock className="w-4 h-4 mr-2" />
+                                                  Limited access
+                                                </DropdownMenuItem>
+                                              </>
+                                            )}
+                                          </DropdownMenuContent>
                         </DropdownMenu>
                       </TableCell>
                     </TableRow>

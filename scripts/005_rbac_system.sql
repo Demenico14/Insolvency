@@ -31,13 +31,13 @@ CREATE TABLE IF NOT EXISTS role_permissions (
 
 -- User profiles table (extends auth.users)
 CREATE TABLE IF NOT EXISTS user_profiles (
-  id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
-  role_id UUID NOT NULL REFERENCES roles(id),
-  full_name TEXT,
-  email TEXT,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID UNIQUE NOT NULL,
+  role_id UUID REFERENCES roles(id),
+  first_name TEXT,
+  last_name TEXT,
   department TEXT,
   is_active BOOLEAN DEFAULT true,
-  assigned_officer_id UUID REFERENCES officers(id),
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
@@ -66,13 +66,13 @@ CREATE POLICY "role_permissions_select_all" ON role_permissions FOR SELECT TO au
 -- RLS Policies for user_profiles
 CREATE POLICY "user_profiles_select_all" ON user_profiles FOR SELECT TO authenticated USING (true);
 CREATE POLICY "user_profiles_insert" ON user_profiles FOR INSERT TO authenticated WITH CHECK (true);
-CREATE POLICY "user_profiles_update_own" ON user_profiles FOR UPDATE TO authenticated USING (id = auth.uid());
+CREATE POLICY "user_profiles_update_own" ON user_profiles FOR UPDATE TO authenticated USING (user_id = auth.uid());
 CREATE POLICY "user_profiles_update_supervisor" ON user_profiles FOR UPDATE TO authenticated 
   USING (
     EXISTS (
       SELECT 1 FROM user_profiles up 
       JOIN roles r ON up.role_id = r.id 
-      WHERE up.id = auth.uid() AND r.name = 'supervisor'
+      WHERE up.user_id = auth.uid() AND r.name = 'supervisor'
     )
   );
 
@@ -150,7 +150,7 @@ END $$;
 -- =====================================================
 -- Function to get user role
 -- =====================================================
-CREATE OR REPLACE FUNCTION get_user_role(user_id UUID)
+CREATE OR REPLACE FUNCTION get_user_role(p_user_id UUID)
 RETURNS TEXT AS $$
 DECLARE
   role_name TEXT;
@@ -158,7 +158,7 @@ BEGIN
   SELECT r.name INTO role_name
   FROM user_profiles up
   JOIN roles r ON up.role_id = r.id
-  WHERE up.id = user_id;
+  WHERE up.user_id = p_user_id;
   
   RETURN COALESCE(role_name, 'general_user');
 END;
@@ -167,7 +167,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- =====================================================
 -- Function to check if user has permission
 -- =====================================================
-CREATE OR REPLACE FUNCTION user_has_permission(user_id UUID, permission_code TEXT)
+CREATE OR REPLACE FUNCTION user_has_permission(p_user_id UUID, permission_code TEXT)
 RETURNS BOOLEAN AS $$
 DECLARE
   has_permission BOOLEAN;
@@ -177,7 +177,7 @@ BEGIN
     FROM user_profiles up
     JOIN role_permissions rp ON up.role_id = rp.role_id
     JOIN permissions p ON rp.permission_id = p.id
-    WHERE up.id = user_id AND p.code = permission_code
+    WHERE up.user_id = p_user_id AND p.code = permission_code
   ) INTO has_permission;
   
   RETURN COALESCE(has_permission, false);
@@ -187,7 +187,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- =====================================================
 -- Function to get all user permissions
 -- =====================================================
-CREATE OR REPLACE FUNCTION get_user_permissions(user_id UUID)
+CREATE OR REPLACE FUNCTION get_user_permissions(p_user_id UUID)
 RETURNS TABLE(permission_code TEXT) AS $$
 BEGIN
   RETURN QUERY
@@ -195,7 +195,7 @@ BEGIN
   FROM user_profiles up
   JOIN role_permissions rp ON up.role_id = rp.role_id
   JOIN permissions p ON rp.permission_id = p.id
-  WHERE up.id = user_id;
+  WHERE up.user_id = p_user_id;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -206,28 +206,44 @@ CREATE OR REPLACE FUNCTION handle_new_user()
 RETURNS TRIGGER AS $$
 DECLARE
   default_role_id UUID;
+  selected_role TEXT;
+  selected_role_id UUID;
 BEGIN
-  -- Default to general_user role
-  SELECT id INTO default_role_id FROM roles WHERE name = 'general_user';
+  -- Check if user specified a role in metadata
+  selected_role := COALESCE(NEW.raw_user_meta_data->>'role', 'general_user');
   
-  INSERT INTO user_profiles (id, role_id, full_name, email)
+  -- Get the role ID
+  SELECT id INTO selected_role_id FROM roles WHERE name = selected_role;
+  
+  -- Fallback to general_user if role not found
+  IF selected_role_id IS NULL THEN
+    SELECT id INTO selected_role_id FROM roles WHERE name = 'general_user';
+  END IF;
+  
+  INSERT INTO user_profiles (user_id, role_id, first_name, last_name, department)
   VALUES (
     NEW.id, 
-    default_role_id,
-    COALESCE(NEW.raw_user_meta_data->>'full_name', ''),
-    NEW.email
+    selected_role_id,
+    COALESCE(NEW.raw_user_meta_data->>'first_name', ''),
+    COALESCE(NEW.raw_user_meta_data->>'last_name', ''),
+    COALESCE(NEW.raw_user_meta_data->>'department', '')
   );
   
   RETURN NEW;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Create trigger for new user signup
-DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
-CREATE TRIGGER on_auth_user_created
-  AFTER INSERT ON auth.users
-  FOR EACH ROW
-  EXECUTE FUNCTION handle_new_user();
+-- Create trigger for new user signup (only if auth.users exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'auth' AND table_name = 'users') THEN
+    DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+    CREATE TRIGGER on_auth_user_created
+      AFTER INSERT ON auth.users
+      FOR EACH ROW
+      EXECUTE FUNCTION handle_new_user();
+  END IF;
+END $$;
 
 -- =====================================================
 -- Update updated_at trigger for user_profiles
@@ -244,14 +260,17 @@ CREATE TRIGGER update_user_profiles_updated_at
 CREATE OR REPLACE VIEW user_role_view AS
 SELECT 
   up.id,
-  up.full_name,
-  up.email,
+  up.user_id,
+  up.first_name,
+  up.last_name,
   up.department,
   up.is_active,
-  up.assigned_officer_id,
   r.name as role_name,
   r.description as role_description,
   up.created_at,
   up.updated_at
 FROM user_profiles up
-JOIN roles r ON up.role_id = r.id;
+LEFT JOIN roles r ON up.role_id = r.id;
+
+-- Create index on user_id
+CREATE INDEX IF NOT EXISTS idx_user_profiles_user_id ON user_profiles(user_id);
