@@ -151,7 +151,7 @@ export function FilesList() {
       physical_location: file.physical_location ?? "",
       status:            file.status,
       category_id:       file.category?.id ?? "",
-      notes:             "",
+      notes:             file.notes ?? "",
     })
     setEditError(null)
     setEditDialogOpen(true)
@@ -689,24 +689,75 @@ export function FilesList() {
 
           <ScrollArea className="flex-1">
             <div className="p-6 space-y-6">
-              <div className="space-y-4">
-                <h3 className="text-sm font-semibold text-foreground uppercase tracking-wide">File Information</h3>
-                <div className="grid grid-cols-2 gap-4">
+
+              {/* ── Core File Information ── */}
+              <div className="space-y-3">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">File Information</h3>
+                <div className="grid grid-cols-2 gap-x-6 gap-y-4">
                   {[
-                    ["Category",          selectedFile?.category ? `${selectedFile.category.code} - ${selectedFile.category.name}` : "—"],
-                    ["Registration ID",   selectedFile?.registration_id || "—"],
-                    ["Date Received",     selectedFile?.date_received ? formatDate(selectedFile.date_received) : "—"],
+                    ["File Reference",  selectedFile?.file_reference || "—"],
+                    ["Client / Entity", selectedFile?.client_name || "—"],
+                    ["Category",        selectedFile?.category ? `${selectedFile.category.code} — ${selectedFile.category.name}` : "—"],
+                    ["Registration ID", selectedFile?.registration_id || "—"],
+                    ["Date Received",   selectedFile?.date_received ? formatDate(selectedFile.date_received) : "—"],
+                    ["Status",          selectedFile?.status || "—"],
                     ["Physical Location", selectedFile?.physical_location || "—"],
                     ["Assigned Officer",  selectedFile?.officer?.name || "Unassigned"],
-                    ["Created",           selectedFile?.created_at ? formatDate(selectedFile.created_at) : "—"],
+                    ["Registered On",   selectedFile?.created_at ? formatDate(selectedFile.created_at) : "—"],
                   ].map(([label, value]) => (
-                    <div key={label} className="space-y-1">
-                      <p className="text-xs text-muted-foreground">{label}</p>
+                    <div key={label} className="space-y-0.5">
+                      <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">{label}</p>
                       <p className="text-sm text-foreground">{value}</p>
                     </div>
                   ))}
                 </div>
               </div>
+
+              {/* ── Notes ── */}
+              {selectedFile?.notes && (
+                <>
+                  <Separator />
+                  <div className="space-y-2">
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Notes</h3>
+                    <p className="text-sm text-foreground whitespace-pre-wrap bg-muted/40 rounded-lg px-3 py-2">
+                      {selectedFile.notes}
+                    </p>
+                  </div>
+                </>
+              )}
+
+              {/* ── Category-Specific Details ── */}
+              {selectedFile?.category_details && Object.keys(selectedFile.category_details).filter(k =>
+                !['clientName','registrationId','dateReceived','assignedOfficer','physicalLocation','status','file_reference'].includes(k)
+                && selectedFile.category_details![k]
+              ).length > 0 && (
+                <>
+                  <Separator />
+                  <div className="space-y-3">
+                    <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                      {selectedFile.category?.name} Details
+                    </h3>
+                    <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+                      {Object.entries(selectedFile.category_details)
+                        .filter(([k, v]) =>
+                          !['clientName','registrationId','dateReceived','assignedOfficer',
+                            'physicalLocation','status','file_reference'].includes(k) && v
+                        )
+                        .map(([key, value]) => (
+                          <div key={key} className="space-y-0.5">
+                            <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wide">
+                              {key
+                                .replace(/([A-Z])/g, ' $1')
+                                .replace(/^./, s => s.toUpperCase())
+                                .trim()}
+                            </p>
+                            <p className="text-sm text-foreground">{String(value)}</p>
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                </>
+              )}
 
               <Separator />
 

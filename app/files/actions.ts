@@ -14,6 +14,8 @@ export interface FileRecord {
   created_at: string
   document_url: string | null
   document_name: string | null
+  notes: string | null
+  category_details: Record<string, string> | null
   category: { id: string; code: string; name: string } | null
   officer: { id: string; name: string } | null
 }
@@ -47,6 +49,7 @@ export async function getFiles(
     .select(`
       id, file_reference, client_name, registration_id, date_received,
       physical_location, status, created_at, document_url, document_name,
+      notes, category_details,
       category:categories(id, code, name),
       officer:officers(id, name)
     `, { count: 'exact' })
@@ -85,6 +88,7 @@ export async function getFileById(id: string): Promise<FileRecord | null> {
     .select(`
       id, file_reference, client_name, registration_id, date_received,
       physical_location, status, created_at, document_url, document_name,
+      notes, category_details,
       category:categories(id, code, name),
       officer:officers(id, name)
     `)
