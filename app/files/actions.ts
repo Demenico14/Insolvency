@@ -1,6 +1,7 @@
-"use server"
+'use server'
 
-import { createClient } from "@/lib/supabase/server"
+import { createClient } from '@/lib/supabase/server'
+import { logAction } from '@/lib/audit'
 
 export interface FileRecord {
   id: string
@@ -13,15 +14,8 @@ export interface FileRecord {
   created_at: string
   document_url: string | null
   document_name: string | null
-  category: {
-    id: string
-    code: string
-    name: string
-  } | null
-  officer: {
-    id: string
-    name: string
-  } | null
+  category: { id: string; code: string; name: string } | null
+  officer: { id: string; name: string } | null
 }
 
 export interface FilesFilter {
@@ -43,72 +37,36 @@ export interface PaginatedResult {
 
 export async function getFiles(
   filters: FilesFilter = {},
-  page: number = 1,
-  pageSize: number = 10
+  page = 1,
+  pageSize = 10
 ): Promise<PaginatedResult> {
   const supabase = await createClient()
-  
+
   let query = supabase
-    .from("files")
+    .from('files')
     .select(`
-      id,
-      file_reference,
-      client_name,
-      registration_id,
-      date_received,
-      physical_location,
-      status,
-      created_at,
-      document_url,
-      document_name,
+      id, file_reference, client_name, registration_id, date_received,
+      physical_location, status, created_at, document_url, document_name,
       category:categories(id, code, name),
       officer:officers(id, name)
-    `, { count: "exact" })
+    `, { count: 'exact' })
 
-  // Apply filters
-  if (filters.search) {
+  if (filters.search)
     query = query.or(`file_reference.ilike.%${filters.search}%,client_name.ilike.%${filters.search}%,registration_id.ilike.%${filters.search}%`)
-  }
+  if (filters.category)  query = query.eq('category_id', filters.category)
+  if (filters.status)    query = query.eq('status', filters.status)
+  if (filters.officer)   query = query.eq('assigned_officer_id', filters.officer)
+  if (filters.dateFrom)  query = query.gte('date_received', filters.dateFrom)
+  if (filters.dateTo)    query = query.lte('date_received', filters.dateTo)
 
-  if (filters.category) {
-    query = query.eq("category_id", filters.category)
-  }
-
-  if (filters.status) {
-    query = query.eq("status", filters.status)
-  }
-
-  if (filters.officer) {
-    query = query.eq("assigned_officer_id", filters.officer)
-  }
-
-  if (filters.dateFrom) {
-    query = query.gte("date_received", filters.dateFrom)
-  }
-
-  if (filters.dateTo) {
-    query = query.lte("date_received", filters.dateTo)
-  }
-
-  // Apply pagination
   const from = (page - 1) * pageSize
-  const to = from + pageSize - 1
-
-  query = query
-    .order("created_at", { ascending: false })
-    .range(from, to)
-
   const { data, count, error } = await query
+    .order('created_at', { ascending: false })
+    .range(from, from + pageSize - 1)
 
   if (error) {
-    console.error("Error fetching files:", error)
-    return {
-      files: [],
-      totalCount: 0,
-      page,
-      pageSize,
-      totalPages: 0,
-    }
+    console.error('Error fetching files:', error)
+    return { files: [], totalCount: 0, page, pageSize, totalPages: 0 }
   }
 
   return {
@@ -122,46 +80,38 @@ export async function getFiles(
 
 export async function getFileById(id: string): Promise<FileRecord | null> {
   const supabase = await createClient()
-  
   const { data, error } = await supabase
-    .from("files")
+    .from('files')
     .select(`
-      id,
-      file_reference,
-      client_name,
-      registration_id,
-      date_received,
-      physical_location,
-      status,
-      created_at,
-      document_url,
-      document_name,
+      id, file_reference, client_name, registration_id, date_received,
+      physical_location, status, created_at, document_url, document_name,
       category:categories(id, code, name),
       officer:officers(id, name)
     `)
-    .eq("id", id)
+    .eq('id', id)
     .single()
 
-  if (error) {
-    console.error("Error fetching file:", error)
-    return null
-  }
-
+  if (error) return null
   return data as unknown as FileRecord
 }
 
 export async function deleteFile(id: string): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient()
-  
-  const { error } = await supabase
-    .from("files")
-    .delete()
-    .eq("id", id)
 
-  if (error) {
-    console.error("Error deleting file:", error)
-    return { success: false, error: error.message }
-  }
+  // Fetch label before deleting
+  const { data: file } = await supabase
+    .from('files').select('file_reference, client_name').eq('id', id).single()
+
+  const { error } = await supabase.from('files').delete().eq('id', id)
+  if (error) return { success: false, error: error.message }
+
+  await logAction({
+    action:       'file.deleted',
+    entity_type:  'file',
+    entity_id:    id,
+    entity_label: file?.file_reference,
+    metadata:     { client_name: file?.client_name },
+  })
 
   return { success: true }
 }
@@ -171,16 +121,25 @@ export async function updateFileStatus(
   status: string
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient()
-  
-  const { error } = await supabase
-    .from("files")
-    .update({ status, updated_at: new Date().toISOString() })
-    .eq("id", id)
 
-  if (error) {
-    console.error("Error updating file status:", error)
-    return { success: false, error: error.message }
-  }
+  const { data: file } = await supabase
+    .from('files').select('file_reference, status').eq('id', id).single()
+
+  const { error } = await supabase
+    .from('files')
+    .update({ status, updated_at: new Date().toISOString() })
+    .eq('id', id)
+
+  if (error) return { success: false, error: error.message }
+
+  await logAction({
+    action:       'file.status_changed',
+    entity_type:  'file',
+    entity_id:    id,
+    entity_label: file?.file_reference,
+    old_value:    file?.status,
+    new_value:    status,
+  })
 
   return { success: true }
 }
@@ -201,24 +160,36 @@ export async function updateFileMetadata(
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient()
 
-  const { error } = await supabase
-    .from("files")
-    .update({
-      client_name: data.client_name,
-      registration_id: data.registration_id || null,
-      date_received: data.date_received,
-      physical_location: data.physical_location || null,
-      status: data.status,
-      category_id: data.category_id || null,
-      notes: data.notes || null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", id)
+  const { data: before } = await supabase
+    .from('files').select('file_reference, client_name, status').eq('id', id).single()
 
-  if (error) {
-    console.error("Error updating file metadata:", error)
-    return { success: false, error: error.message }
-  }
+  const { error } = await supabase
+    .from('files')
+    .update({
+      client_name:       data.client_name,
+      registration_id:   data.registration_id   || null,
+      date_received:     data.date_received,
+      physical_location: data.physical_location  || null,
+      status:            data.status,
+      category_id:       data.category_id        || null,
+      notes:             data.notes              || null,
+      updated_at:        new Date().toISOString(),
+    })
+    .eq('id', id)
+
+  if (error) return { success: false, error: error.message }
+
+  await logAction({
+    action:       'file.metadata_updated',
+    entity_type:  'file',
+    entity_id:    id,
+    entity_label: before?.file_reference,
+    metadata: {
+      client_name:       data.client_name,
+      status:            data.status,
+      physical_location: data.physical_location,
+    },
+  })
 
   return { success: true }
 }
@@ -229,18 +200,34 @@ export async function reassignFileOfficer(
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient()
 
-  const { error } = await supabase
-    .from("files")
-    .update({
-      assigned_officer_id: officerId || null,
-      updated_at: new Date().toISOString(),
-    })
-    .eq("id", fileId)
+  // Fetch old officer name
+  const { data: file } = await supabase
+    .from('files')
+    .select('file_reference, officer:officers(name), assigned_officer_id')
+    .eq('id', fileId)
+    .single()
 
-  if (error) {
-    console.error("Error reassigning file officer:", error)
-    return { success: false, error: error.message }
-  }
+  const { data: newOfficer } = await supabase
+    .from('officers').select('name').eq('id', officerId).single()
+
+  const { error } = await supabase
+    .from('files')
+    .update({ assigned_officer_id: officerId || null, updated_at: new Date().toISOString() })
+    .eq('id', fileId)
+
+  if (error) return { success: false, error: error.message }
+
+  const oldName = (file?.officer as any)?.name ?? 'Unassigned'
+  const newName = newOfficer?.name ?? 'Unassigned'
+
+  await logAction({
+    action:       'file.officer_reassigned',
+    entity_type:  'file',
+    entity_id:    fileId,
+    entity_label: file?.file_reference,
+    old_value:    oldName,
+    new_value:    newName,
+  })
 
   return { success: true }
 }

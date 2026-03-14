@@ -1,6 +1,7 @@
 "use server"
 
 import { createClient } from "@/lib/supabase/server"
+import { logAction } from "@/lib/audit"
 
 export interface FileMovement {
   id: string
@@ -107,7 +108,7 @@ export async function getFileMovements(
     }
   }
 
-  let movements = (data || []) as FileMovement[]
+  let movements = (data || []) as unknown as FileMovement[]
 
   // Client-side search filter for file reference/client name
   if (filters.search) {
@@ -154,7 +155,7 @@ export async function getFilesForTracking(search?: string): Promise<FileForTrack
     return []
   }
 
-  return (data || []) as FileForTracking[]
+  return (data || []) as unknown as FileForTracking[]
 }
 
 export async function getFileMovementHistory(fileId: string): Promise<FileMovement[]> {
@@ -195,10 +196,10 @@ export async function checkOutFile(
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient()
 
-  // Get current file location
+  // Get current file info
   const { data: file, error: fileError } = await supabase
     .from("files")
-    .select("physical_location, status")
+    .select("file_reference, physical_location, status")
     .eq("id", fileId)
     .single()
 
@@ -210,17 +211,21 @@ export async function checkOutFile(
     return { success: false, error: "Cannot check out a missing file" }
   }
 
+  // Get current user for performed_by
+  const { data: { user } } = await supabase.auth.getUser()
+
   // Create movement record
   const { error: movementError } = await supabase
     .from("file_movements")
     .insert({
       file_id: fileId,
-      action: "check_out",
+      action: "Check Out",
       from_location: file.physical_location,
       to_location: `Checked out to: ${data.checkedOutTo}`,
       checked_out_to: data.checkedOutTo,
       purpose: data.purpose,
       notes: data.notes || null,
+      performed_by: user?.id ?? null,
       performed_at: new Date().toISOString(),
     })
 
@@ -243,6 +248,21 @@ export async function checkOutFile(
     return { success: false, error: updateError.message }
   }
 
+  await logAction({
+    action:       "movement.check_out",
+    entity_type:  "movement",
+    entity_id:    fileId,
+    entity_label: file.file_reference,
+    old_value:    file.physical_location ?? "Unknown location",
+    new_value:    `Checked out to: ${data.checkedOutTo}`,
+    metadata: {
+      checked_out_to: data.checkedOutTo,
+      purpose:        data.purpose,
+      notes:          data.notes ?? null,
+      from_location:  file.physical_location,
+    },
+  })
+
   return { success: true }
 }
 
@@ -255,10 +275,10 @@ export async function checkInFile(
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient()
 
-  // Get current file location
+  // Get current file info
   const { data: file, error: fileError } = await supabase
     .from("files")
-    .select("physical_location")
+    .select("file_reference, physical_location")
     .eq("id", fileId)
     .single()
 
@@ -266,17 +286,21 @@ export async function checkInFile(
     return { success: false, error: "File not found" }
   }
 
+  // Get current user for performed_by
+  const { data: { user } } = await supabase.auth.getUser()
+
   // Create movement record
   const { error: movementError } = await supabase
     .from("file_movements")
     .insert({
       file_id: fileId,
-      action: "check_in",
+      action: "Check In",
       from_location: file.physical_location,
       to_location: data.returnLocation,
       checked_out_to: null,
       purpose: "File returned",
       notes: data.notes || null,
+      performed_by: user?.id ?? null,
       performed_at: new Date().toISOString(),
     })
 
@@ -299,6 +323,20 @@ export async function checkInFile(
     return { success: false, error: updateError.message }
   }
 
+  await logAction({
+    action:       "movement.check_in",
+    entity_type:  "movement",
+    entity_id:    fileId,
+    entity_label: file.file_reference,
+    old_value:    file.physical_location ?? "Unknown location",
+    new_value:    data.returnLocation,
+    metadata: {
+      return_location: data.returnLocation,
+      notes:           data.notes ?? null,
+      from_location:   file.physical_location,
+    },
+  })
+
   return { success: true }
 }
 
@@ -312,10 +350,10 @@ export async function transferFile(
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient()
 
-  // Get current file location
+  // Get current file info
   const { data: file, error: fileError } = await supabase
     .from("files")
-    .select("physical_location, status")
+    .select("file_reference, physical_location, status")
     .eq("id", fileId)
     .single()
 
@@ -327,17 +365,21 @@ export async function transferFile(
     return { success: false, error: "Cannot transfer a missing file" }
   }
 
+  // Get current user for performed_by
+  const { data: { user } } = await supabase.auth.getUser()
+
   // Create movement record
   const { error: movementError } = await supabase
     .from("file_movements")
     .insert({
       file_id: fileId,
-      action: "transfer",
+      action: "Transfer",
       from_location: file.physical_location,
       to_location: data.toLocation,
       checked_out_to: null,
       purpose: data.purpose,
       notes: data.notes || null,
+      performed_by: user?.id ?? null,
       performed_at: new Date().toISOString(),
     })
 
@@ -359,6 +401,21 @@ export async function transferFile(
     console.error("Error updating file:", updateError)
     return { success: false, error: updateError.message }
   }
+
+  await logAction({
+    action:       "movement.transfer",
+    entity_type:  "movement",
+    entity_id:    fileId,
+    entity_label: file.file_reference,
+    old_value:    file.physical_location ?? "Unknown location",
+    new_value:    data.toLocation,
+    metadata: {
+      from_location: file.physical_location,
+      to_location:   data.toLocation,
+      purpose:       data.purpose,
+      notes:         data.notes ?? null,
+    },
+  })
 
   return { success: true }
 }

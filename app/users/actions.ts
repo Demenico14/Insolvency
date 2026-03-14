@@ -3,6 +3,7 @@
 import { createClient } from '@/lib/supabase/server'
 import { getCurrentUserWithRole } from '@/lib/rbac/server'
 import { RoleName, ROLE_PERMISSIONS } from '@/lib/rbac/types'
+import { logAction } from '@/lib/audit'
 
 export interface UserRecord {
   id: string
@@ -158,10 +159,24 @@ export async function updateUserRole(
     return { success: false, error: error.message }
   }
 
+  // Fetch target user label for audit
+  const { data: targetProfile } = await supabase
+    .from('user_profiles').select('first_name, last_name').eq('user_id', userId).single()
+  const targetName = targetProfile
+    ? `${targetProfile.first_name ?? ''} ${targetProfile.last_name ?? ''}`.trim() || userId
+    : userId
+
+  await logAction({
+    action:       'user.role_changed',
+    entity_type:  'user',
+    entity_id:    userId,
+    entity_label: targetName,
+    old_value:    role?.name,
+    new_value:    newRole,
+  })
+
   return { success: true }
 }
-
-// Toggle user active status
 export async function toggleUserStatus(
   userId: string
 ): Promise<{ success: boolean; error?: string; newStatus?: boolean }> {
@@ -199,6 +214,21 @@ export async function toggleUserStatus(
   if (error) {
     return { success: false, error: error.message }
   }
+
+  const { data: targetProfile } = await supabase
+    .from('user_profiles').select('first_name, last_name').eq('user_id', userId).single()
+  const targetName = targetProfile
+    ? `${targetProfile.first_name ?? ''} ${targetProfile.last_name ?? ''}`.trim() || userId
+    : userId
+
+  await logAction({
+    action:       newStatus ? 'user.activated' : 'user.deactivated',
+    entity_type:  'user',
+    entity_id:    userId,
+    entity_label: targetName,
+    old_value:    profile.is_active ? 'active' : 'inactive',
+    new_value:    newStatus ? 'active' : 'inactive',
+  })
 
   return { success: true, newStatus }
 }
@@ -321,6 +351,15 @@ export async function createSupervisorAccount(data: {
   if (profileError) {
     return { success: false, error: profileError.message }
   }
+
+  await logAction({
+    action:       'user.supervisor_created',
+    entity_type:  'user',
+    entity_id:    newUser.user.id,
+    entity_label: `${data.firstName} ${data.lastName}`.trim(),
+    new_value:    'supervisor',
+    metadata:     { email: data.email, department: data.department },
+  })
 
   return { success: true }
 }

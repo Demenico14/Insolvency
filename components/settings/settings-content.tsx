@@ -131,42 +131,7 @@ export function SettingsContent() {
         )}
       </Card>
 
-      <Card className="p-6">
-        <h3 className="font-semibold text-lg mb-6">Notifications</h3>
-        <div className="space-y-4">
-          {[
-            { label: "Email notifications", description: "Receive email about your account activity" },
-            { label: "Push notifications", description: "Receive push notifications in your browser" },
-            { label: "Task reminders", description: "Get reminded about upcoming task deadlines" },
-            { label: "Team updates", description: "Notifications about team member activities" },
-          ].map((item, index) => (
-            <div
-              key={item.label}
-              className="flex items-center justify-between py-3 border-b border-border last:border-0"
-            >
-              <div>
-                <p className="font-medium">{item.label}</p>
-                <p className="text-sm text-muted-foreground">{item.description}</p>
-              </div>
-              <Switch defaultChecked={index < 2} />
-            </div>
-          ))}
-        </div>
-      </Card>
 
-      <Card className="p-6">
-        <h3 className="font-semibold text-lg mb-6">Appearance</h3>
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="font-medium">Dark Mode</p>
-            <p className="text-sm text-muted-foreground">Enable dark mode theme</p>
-          </div>
-          <Switch
-            checked={theme === "dark"}
-            onCheckedChange={(checked) => setTheme(checked ? "dark" : "light")}
-          />
-        </div>
-      </Card>
     </div>
   )
 }

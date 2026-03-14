@@ -1,6 +1,6 @@
 "use client"
 
-import { LayoutDashboard, FolderOpen, FilePlus, ArrowRightLeft, FileBarChart, Settings, LogOut, Users, Shield } from "lucide-react"
+import { LayoutDashboard, FolderOpen, FilePlus, ArrowRightLeft, FileBarChart, Settings, LogOut, Users, Shield, ClipboardList } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { useState } from "react"
 import Link from "next/link"
@@ -29,7 +29,8 @@ const menuItems: MenuItem[] = [
 
 // Supervisor-only menu items
 const supervisorItems: MenuItem[] = [
-  { icon: Users, label: "User Management", href: "/users", supervisorOnly: true },
+  { icon: Users,         label: "User Management", href: "/users",  supervisorOnly: true },
+  { icon: ClipboardList, label: "Audit Log",        href: "/audit",  supervisorOnly: true },
 ]
 
 const generalItems: MenuItem[] = [
