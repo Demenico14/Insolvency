@@ -1,133 +1,123 @@
-import { createServerClient } from "@supabase/ssr";
-import { NextResponse, type NextRequest } from "next/server";
-import { RoleName, ROLE_PERMISSIONS } from "@/lib/rbac/types";
+import { createServerClient } from "@supabase/ssr"
+import { NextResponse, type NextRequest } from "next/server"
+import { RoleName, ROLE_PERMISSIONS } from "@/lib/rbac/types"
 
-// Routes that require supervisor role
-const SUPERVISOR_ONLY_ROUTES = [
-  '/users',
-  '/admin',
-  '/audit',
-]
+// ── Route config ──────────────────────────────────────────────────────────────
 
-// Routes with specific permission requirements
+/** Routes only supervisors may visit */
+const SUPERVISOR_ONLY_ROUTES = ['/users', '/admin', '/audit']
+
+/** Routes that require a specific permission */
 const ROUTE_PERMISSIONS: Record<string, string[]> = {
-  '/users': ['users:manage'],
-  '/settings': ['settings:manage'],
-};
+  '/users':    ['users:manage'],
+  '/settings': ['settings:view_own'],
+}
+
+/** Public paths — no auth required */
+const isPublicPath = (pathname: string) =>
+  pathname === '/auth' ||
+  pathname.startsWith('/api/') ||
+  pathname.startsWith('/_next') ||
+  pathname.startsWith('/favicon')
+
+// ── Middleware ─────────────────────────────────────────────────────────────────
 
 export async function middleware(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
+  let supabaseResponse = NextResponse.next({ request })
 
+  // Build a lightweight Supabase client just to refresh the session cookie.
+  // We do NOT make any extra DB calls here — everything comes from the JWT.
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        setAll(cookiesToSet) {
+        getAll: () => request.cookies.getAll(),
+        setAll: (cookiesToSet) => {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
-          );
-          supabaseResponse = NextResponse.next({ request });
+          )
+          supabaseResponse = NextResponse.next({ request })
           cookiesToSet.forEach(({ name, value, options }) =>
             supabaseResponse.cookies.set(name, value, options)
-          );
+          )
         },
       },
     }
-  );
+  )
 
-  // Refresh session
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  // getUser() validates the JWT and refreshes the session cookie if needed.
+  // It does NOT hit the database — the user object is decoded from the token.
+  const { data: { user } } = await supabase.auth.getUser()
 
-  const { pathname } = request.nextUrl;
+  const { pathname } = request.nextUrl
 
-  // Allow auth page, API routes, and static assets through
-  const isPublicPath =
-    pathname === "/auth" ||
-    pathname.startsWith("/api/") ||
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/favicon");
-
-  if (!user && !isPublicPath) {
-    // Not logged in — redirect to /auth
-    return NextResponse.redirect(new URL("/auth", request.url));
+  // ── 1. Let public paths through ─────────────────────────────────────────────
+  if (isPublicPath(pathname)) {
+    // Redirect already-authenticated users away from /auth
+    if (user && pathname === '/auth') {
+      return NextResponse.redirect(new URL('/', request.url))
+    }
+    return supabaseResponse
   }
 
-  if (user && pathname === "/auth") {
-    // Already logged in — redirect to /
-    return NextResponse.redirect(new URL("/", request.url));
+  // ── 2. Redirect unauthenticated users to /auth ───────────────────────────────
+  if (!user) {
+    const url = new URL('/auth', request.url)
+    url.searchParams.set('next', pathname) // preserve destination
+    return NextResponse.redirect(url)
   }
 
-  // Role-based access control for protected routes
-  if (user) {
-    // Get user's role AND active status from profile
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select(`is_active, role:roles(name)`)
-      .eq('user_id', user.id)
-      .single()
+  // ── 3. Read role + active status from JWT app_metadata (zero DB cost) ────────
+  //
+  //  app_metadata is written by our sync_user_role_to_jwt trigger whenever
+  //  user_profiles.role_id or user_profiles.is_active changes, and also on
+  //  initial signup via handle_new_user.  It is server-controlled and cannot
+  //  be modified by the client.
+  //
+  const appMeta   = user.app_metadata ?? {}
+  const isActive  = appMeta.is_active !== false // default true if not set yet
+  const userRole  = (appMeta.role ?? 'general_user') as RoleName
+  const userPerms = ROLE_PERMISSIONS[userRole] ?? ROLE_PERMISSIONS.general_user
 
-    // Block deactivated users — clear their session cookies and redirect
-    if (profile && profile.is_active === false) {
-      const url = new URL('/auth', request.url)
-      url.searchParams.set('error', 'account_disabled')
-      const response = NextResponse.redirect(url)
-      // Clear all Supabase auth cookies so the session is fully terminated
-      request.cookies.getAll().forEach(cookie => {
-        if (cookie.name.startsWith('sb-')) {
-          response.cookies.delete(cookie.name)
-        }
-      })
-      return response
+  // ── 4. Block deactivated accounts ────────────────────────────────────────────
+  if (!isActive) {
+    const url = new URL('/auth', request.url)
+    url.searchParams.set('error', 'account_disabled')
+    const response = NextResponse.redirect(url)
+    // Wipe all Supabase session cookies so the user is fully signed out
+    request.cookies.getAll().forEach(({ name }) => {
+      if (name.startsWith('sb-')) response.cookies.delete(name)
+    })
+    return response
+  }
+
+  // ── 5. Supervisor-only route guard ────────────────────────────────────────────
+  if (SUPERVISOR_ONLY_ROUTES.some(r => pathname.startsWith(r))) {
+    if (userRole !== 'supervisor') {
+      return NextResponse.redirect(new URL('/', request.url))
     }
+  }
 
-    const userRole = (profile?.role?.name || 'general_user') as RoleName
-    const userPermissions = ROLE_PERMISSIONS[userRole] || ROLE_PERMISSIONS.general_user
-
-    // Check supervisor-only routes
-    const isSupervisorRoute = SUPERVISOR_ONLY_ROUTES.some(route => 
-      pathname.startsWith(route)
-    );
-
-    if (isSupervisorRoute && userRole !== 'supervisor') {
-      // Redirect non-supervisors away from supervisor-only routes
-      return NextResponse.redirect(new URL('/', request.url));
-    }
-
-    // Check route-specific permissions
-    for (const [route, requiredPermissions] of Object.entries(ROUTE_PERMISSIONS)) {
-      if (pathname.startsWith(route)) {
-        const hasRequiredPermission = requiredPermissions.some(
-          permission => userPermissions.includes(permission)
-        );
-
-        if (!hasRequiredPermission) {
-          // User doesn't have required permission for this route
-          return NextResponse.redirect(new URL('/', request.url));
-        }
+  // ── 6. Permission-based route guard ───────────────────────────────────────────
+  for (const [route, required] of Object.entries(ROUTE_PERMISSIONS)) {
+    if (pathname.startsWith(route)) {
+      const hasPermission = required.some(p => userPerms.includes(p))
+      if (!hasPermission) {
+        return NextResponse.redirect(new URL('/', request.url))
       }
     }
-
-    // Add role information to response headers for client-side access
-    supabaseResponse.headers.set('x-user-role', userRole);
   }
 
-  return supabaseResponse;
+  // ── 7. Stamp role onto response header for downstream use ────────────────────
+  supabaseResponse.headers.set('x-user-role', userRole)
+
+  return supabaseResponse
 }
 
+// ── Matcher: skip Next.js internals and static assets ─────────────────────────
 export const config = {
   matcher: [
-    /*
-     * Match all request paths except:
-     * - _next/static, _next/image (Next.js internals)
-     * - favicon.ico
-     * - public folder files
-     */
     "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
-};
+}
