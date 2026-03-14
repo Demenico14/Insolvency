@@ -171,6 +171,7 @@ export interface FileMetadataUpdate {
   status: string
   category_id: string
   notes: string
+  category_details?: Record<string, string>
 }
 
 export async function updateFileMetadata(
@@ -192,6 +193,7 @@ export async function updateFileMetadata(
       status:            data.status,
       category_id:       data.category_id        || null,
       notes:             data.notes              || null,
+      category_details:  data.category_details   ?? null,
       updated_at:        new Date().toISOString(),
     })
     .eq('id', id)
