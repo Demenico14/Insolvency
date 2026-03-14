@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { logAction } from "@/lib/audit"
 
 export async function POST(request: NextRequest) {
   try {
@@ -64,6 +65,24 @@ export async function POST(request: NextRequest) {
     const { data: urlData } = supabase.storage
       .from("insolvency-files")
       .getPublicUrl(data.path)
+
+    // Log the upload — file_id is passed as optional form field
+    const fileId  = formData.get("file_id")  as string | null
+    const fileRef = formData.get("file_ref") as string | null
+
+    await logAction({
+      action:       'file.document_uploaded',
+      entity_type:  'file',
+      entity_id:    fileId  ?? undefined,
+      entity_label: fileRef ?? undefined,
+      new_value:    file.name,
+      metadata: {
+        filename: file.name,
+        size:     file.size,
+        type:     file.type,
+        path:     data.path,
+      },
+    })
 
     return NextResponse.json({ 
       url: urlData.publicUrl,

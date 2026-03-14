@@ -6,7 +6,8 @@ import { RoleName, ROLE_PERMISSIONS } from "@/lib/rbac/types";
 const SUPERVISOR_ONLY_ROUTES = [
   '/users',
   '/admin',
-];
+  '/audit',
+]
 
 // Routes with specific permission requirements
 const ROUTE_PERMISSIONS: Record<string, string[]> = {
@@ -64,17 +65,29 @@ export async function middleware(request: NextRequest) {
 
   // Role-based access control for protected routes
   if (user) {
-    // Get user's role from profile
+    // Get user's role AND active status from profile
     const { data: profile } = await supabase
       .from('user_profiles')
-      .select(`
-        role:roles(name)
-      `)
+      .select(`is_active, role:roles(name)`)
       .eq('user_id', user.id)
-      .single();
+      .single()
 
-    const userRole = (profile?.role?.name || 'general_user') as RoleName;
-    const userPermissions = ROLE_PERMISSIONS[userRole] || ROLE_PERMISSIONS.general_user;
+    // Block deactivated users — clear their session cookies and redirect
+    if (profile && profile.is_active === false) {
+      const url = new URL('/auth', request.url)
+      url.searchParams.set('error', 'account_disabled')
+      const response = NextResponse.redirect(url)
+      // Clear all Supabase auth cookies so the session is fully terminated
+      request.cookies.getAll().forEach(cookie => {
+        if (cookie.name.startsWith('sb-')) {
+          response.cookies.delete(cookie.name)
+        }
+      })
+      return response
+    }
+
+    const userRole = (profile?.role?.name || 'general_user') as RoleName
+    const userPermissions = ROLE_PERMISSIONS[userRole] || ROLE_PERMISSIONS.general_user
 
     // Check supervisor-only routes
     const isSupervisorRoute = SUPERVISOR_ONLY_ROUTES.some(route => 

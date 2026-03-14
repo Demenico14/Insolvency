@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server"
 import { revalidatePath } from "next/cache"
+import { logAction } from "@/lib/audit"
 
 export async function getOfficers() {
   const supabase = await createClient()
@@ -92,6 +93,20 @@ export async function registerFile(formData: {
 
   revalidatePath("/files")
   revalidatePath("/register")
-  
+
+  await logAction({
+    action:       'file.created',
+    entity_type:  'file',
+    entity_id:    data.id,
+    entity_label: data.file_reference,
+    new_value:    formData.status,
+    metadata: {
+      client_name:    formData.client_name,
+      category_id:    formData.category_id,
+      assigned_officer_id: formData.assigned_officer_id ?? null,
+      physical_location:   formData.physical_location ?? null,
+    },
+  })
+
   return { success: true, data }
 }
