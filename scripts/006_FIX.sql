@@ -58,3 +58,11 @@ CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users
   FOR EACH ROW
   EXECUTE FUNCTION handle_new_user();
+
+
+ALTER TABLE public.file_movements
+  DROP CONSTRAINT IF EXISTS file_movements_action_check;
+
+ALTER TABLE public.file_movements
+  ADD CONSTRAINT file_movements_action_check
+  CHECK (action IN ('Check Out', 'Check In', 'Transfer', 'Archive', 'Retrieve'));
