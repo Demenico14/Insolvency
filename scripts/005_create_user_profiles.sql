@@ -13,35 +13,33 @@ CREATE TABLE IF NOT EXISTS public.profiles (
 -- Enable Row Level Security
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
--- RLS Policies for profiles
--- Users can view their own profile
-CREATE POLICY "profiles_select_own" ON public.profiles 
-  FOR SELECT 
-  USING (auth.uid() = id);
+-- Drop existing policies if they exist
+DROP POLICY IF EXISTS "profiles_select_own" ON public.profiles;
+DROP POLICY IF EXISTS "profiles_select_all_supervisors" ON public.profiles;
+DROP POLICY IF EXISTS "profiles_insert_own" ON public.profiles;
+DROP POLICY IF EXISTS "profiles_update_own" ON public.profiles;
+DROP POLICY IF EXISTS "profiles_update_supervisors" ON public.profiles;
+DROP POLICY IF EXISTS "profiles_delete_supervisors" ON public.profiles;
 
--- Supervisors can view all profiles
-CREATE POLICY "profiles_select_all_supervisors" ON public.profiles 
-  FOR SELECT 
-  USING (
-    EXISTS (
-      SELECT 1 FROM public.profiles 
-      WHERE id = auth.uid() AND role = 'supervisor'
-    )
-  );
+-- RLS Policies for profiles
+-- All authenticated users can read all profiles (needed for role checks)
+CREATE POLICY "profiles_select_authenticated" ON public.profiles 
+  FOR SELECT TO authenticated
+  USING (true);
 
 -- Users can insert their own profile
 CREATE POLICY "profiles_insert_own" ON public.profiles 
-  FOR INSERT 
+  FOR INSERT TO authenticated
   WITH CHECK (auth.uid() = id);
 
--- Users can update their own profile (but not role)
+-- Users can update their own profile
 CREATE POLICY "profiles_update_own" ON public.profiles 
-  FOR UPDATE 
+  FOR UPDATE TO authenticated
   USING (auth.uid() = id);
 
 -- Supervisors can update any profile
 CREATE POLICY "profiles_update_supervisors" ON public.profiles 
-  FOR UPDATE 
+  FOR UPDATE TO authenticated
   USING (
     EXISTS (
       SELECT 1 FROM public.profiles 
@@ -51,7 +49,7 @@ CREATE POLICY "profiles_update_supervisors" ON public.profiles
 
 -- Supervisors can delete profiles (except their own)
 CREATE POLICY "profiles_delete_supervisors" ON public.profiles 
-  FOR DELETE 
+  FOR DELETE TO authenticated
   USING (
     EXISTS (
       SELECT 1 FROM public.profiles 
@@ -105,6 +103,6 @@ CREATE TRIGGER update_profiles_updated_at
   FOR EACH ROW
   EXECUTE FUNCTION update_profiles_updated_at();
 
--- Create index for role lookups
+-- Create indexes for role lookups
 CREATE INDEX IF NOT EXISTS idx_profiles_role ON public.profiles(role);
 CREATE INDEX IF NOT EXISTS idx_profiles_is_active ON public.profiles(is_active);
